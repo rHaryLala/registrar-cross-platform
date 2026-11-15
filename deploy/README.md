@@ -11,3 +11,9 @@ Ordre prudent :
 4. Construire `web/` avec `NEXT_PUBLIC_BASE_PATH=/app` et copier `out/` dans `/var/www/registrar-app`.
 5. Ajouter les deux `location` de `nginx/registrar-coexistence.conf.example` au vhost existant, `nginx -t`, recharger.
 6. Retour arrière : retirer les deux `location` et recharger : l'ancien site n'a pas été touché.
+
+À prévoir aussi (ajouté le 15/11/2026) :
+- `STUDENT_PHOTOS_PATH` dans `.env` : dossier `app/photosetudiants` de l'ancienne application (lecture seule pour l'utilisateur PHP-FPM de l'API). Sans lui, les fiches s'impriment avec un cadre « Photo » vide.
+- `storage/app/dompdf` doit être inscriptible (cache des polices du PDF) ; extensions PHP : `gd` (réduction des photos), `exif` (redressement), `mbstring`, `dom`.
+- **Actualités synchronisées** : ajouter la tâche cron `* * * * * cd /var/www/registrar-api && php artisan schedule:run >> /dev/null 2>&1` (le planificateur lance `news:sync` toutes les 30 minutes) ; le serveur doit pouvoir joindre `https://zurcher.edu.mg` en sortie (HTTPS, port 443). Premier remplissage : `php artisan news:sync`. Supervision : `t_site_news_sync` (un statut `failed` répété = site injoignable ou gabarit changé).
+- Les tables `t_quiz_*` sont créées par `php artisan migrate` (ajout seulement) ; la banque de questions par `php artisan quiz:import-questions`.

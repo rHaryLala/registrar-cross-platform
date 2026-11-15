@@ -15,7 +15,7 @@ import { useGoogleLogin, useLogin, useMe } from "@/lib/auth";
 /** Message affiché pour une erreur : on s'appuie sur le `detail` de l'API, qui dit quoi faire. */
 function messageFor(error: unknown): string {
   if (error instanceof ApiError) {
-    if (error.code === "validation_failed") return "Renseignez votre identifiant et votre mot de passe.";
+    if (error.code === "validation_failed") return "Renseignez votre matricule (ou identifiant, ou adresse e-mail) et votre mot de passe.";
     return error.detail ?? error.title;
   }
   return "Connexion impossible pour le moment. Réessayez dans un instant.";
@@ -90,7 +90,7 @@ export function LoginScreen() {
           dans l'adresse (historique, journaux de serveur). Le bouton reste inactif tant que la page n'est pas prête. */}
       <form onSubmit={submit} method="post" className="grid gap-4" noValidate>
         <div className="grid gap-2">
-          <Label htmlFor="identifier">Identifiant ou adresse e-mail</Label>
+          <Label htmlFor="identifier">Matricule, identifiant ou adresse e-mail</Label>
           <Input
             id="identifier"
             name="identifier"

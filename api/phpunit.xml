@@ -36,6 +36,14 @@
         <env name="SESSION_DRIVER" value="array"/>
         <env name="SANCTUM_STATEFUL_DOMAINS" value="localhost:3000"/>
         <env name="GOOGLE_CLIENT_ID" value="test-client-id"/>
+        <!-- Réglages de sécurité FIXÉS pour les tests : un .env local (ex. test avec la règle des mots de passe communs levée) ne doit jamais les changer. -->
+        <env name="REGISTRAR_STUDENT_PASSWORD_LOGIN" value="true" force="true"/>
+        <env name="REGISTRAR_STUDENT_PASSWORD_MAX_SHARING" value="1" force="true"/>
+        <env name="REGISTRAR_ZERO_COUNTS" value="false" force="true"/>
+        <env name="STUDENT_PHOTOS_PATH" value="C:/dossier-de-photos-inexistant" force="true"/>
+        <env name="SITE_NEWS_DELAY_MS" value="0" force="true"/>
+        <env name="SITE_NEWS_BASE" value="https://zurcher.edu.mg" force="true"/>
+        <env name="ANNOUNCEMENT_IMAGES_PATH" value="C:/dossier-d-images-inexistant" force="true"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAverage, formatGrade, formatLongDate, gradeStateChip, sessionLabel } from "@/lib/format";
+import { formatAr, formatAverage, formatDate, formatDuration, formatGrade, formatLongDate, formatRank, gradeStateChip, maskTail, plural, sessionLabel } from "@/lib/format";
 
 describe("formatGrade", () => {
   it("utilise la virgule décimale française", () => {
@@ -53,5 +53,88 @@ describe("formatLongDate", () => {
   });
   it("renvoie le texte tel quel s'il n'est pas une date", () => {
     expect(formatLongDate("n'importe quoi")).toBe("n'importe quoi");
+  });
+});
+
+describe("formatDuration", () => {
+  it("écrit les secondes seules sous une minute", () => {
+    expect(formatDuration(42_000)).toBe("42 s");
+  });
+  it("écrit minutes et secondes", () => {
+    expect(formatDuration(72_000)).toBe("1 min 12 s");
+  });
+  it("n'écrit pas « 0 s » après une minute pile", () => {
+    expect(formatDuration(120_000)).toBe("2 min");
+  });
+  it("arrondit à la seconde la plus proche", () => {
+    expect(formatDuration(41_600)).toBe("42 s");
+    expect(formatDuration(59_600)).toBe("1 min");
+  });
+  it("ne renvoie jamais « 0 s »", () => {
+    expect(formatDuration(0)).toBe("1 s");
+    expect(formatDuration(120)).toBe("1 s");
+  });
+});
+
+describe("formatRank", () => {
+  it("1er puis 2e, 3e…", () => {
+    expect(formatRank(1)).toBe("1er");
+    expect(formatRank(2)).toBe("2e");
+    expect(formatRank(11)).toBe("11e");
+  });
+});
+
+describe("plural", () => {
+  it("0 et 1 au singulier, le reste au pluriel", () => {
+    expect(plural(0, "partie")).toBe("0 partie");
+    expect(plural(1, "partie")).toBe("1 partie");
+    expect(plural(2, "partie")).toBe("2 parties");
+  });
+  it("accepte un pluriel irrégulier", () => {
+    expect(plural(3, "cheval", "chevaux")).toBe("3 chevaux");
+  });
+});
+
+describe("formatAr", () => {
+  it("groupe les milliers et ajoute l'unité, avec des espaces insécables", () => {
+    expect(formatAr(1500000)).toBe("1\u00a0500\u00a0000\u00a0Ar");
+    expect(formatAr(0)).toBe("0\u00a0Ar");
+  });
+  it("n'affiche jamais de décimales (l'ariary n'a pas de centimes)", () => {
+    expect(formatAr(1234.6)).toBe("1\u00a0235\u00a0Ar");
+  });
+  it("ne contient aucun espace ordinaire ni fine : le montant ne se coupe pas en fin de ligne", () => {
+    expect(formatAr(2335000)).not.toMatch(/[ \u202f]/);
+  });
+});
+
+describe("formatDate", () => {
+  it("écrit la date en français, sans jour de la semaine", () => {
+    expect(formatDate("2001-03-12")).toBe("12 mars 2001");
+    expect(formatDate("2026-05-01")).toBe("1 mai 2026");
+  });
+  it("lit la date en heure locale : jamais décalée d'un jour", () => {
+    expect(formatDate("2026-01-01")).toBe("1 janvier 2026");
+    expect(formatDate("2026-12-31")).toBe("31 décembre 2026");
+  });
+  it("laisse telle quelle une valeur qui n'est pas une vraie date", () => {
+    expect(formatDate("2001-02-30")).toBe("2001-02-30");
+    expect(formatDate("hier")).toBe("hier");
+    expect(formatDate("")).toBe("");
+  });
+});
+
+describe("maskTail", () => {
+  it("cache tout sauf les 4 derniers caractères", () => {
+    expect(maskTail("101 202 303 404")).toBe("•••• •••• 3404");
+  });
+  it("ne révèle jamais plus que la fin", () => {
+    expect(maskTail("123456789012345")).not.toContain("1234");
+    expect(maskTail("123456789012345").endsWith("2345")).toBe(true);
+  });
+  it("cache entièrement un numéro trop court", () => {
+    expect(maskTail("1234")).toBe("••••");
+    expect(maskTail("12")).toBe("••");
+    expect(maskTail("")).toBe("");
   });
 });

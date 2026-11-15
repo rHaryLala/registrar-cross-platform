@@ -23,6 +23,19 @@ abstract class TestCase extends BaseTestCase
         }
     }
 
+    /**
+     * Changer d'utilisateur en cours de test. Le magasin de session « array » survit d'une requête à l'autre dans un même
+     * test : il garde l'empreinte du mot de passe du PREMIER utilisateur (middleware AuthenticateSession de Sanctum), et le
+     * second serait déconnecté d'office (401 trompeur). On vide donc la session et les gardes avant chaque connexion simulée.
+     */
+    public function actingAs(\Illuminate\Contracts\Auth\Authenticatable $user, $guard = null)
+    {
+        $this->app['session.store']->flush();
+        $this->app['auth']->forgetGuards();
+
+        return parent::actingAs($user, $guard);
+    }
+
     /** Une requête venant de l'application (domaine « stateful » de Sanctum) : session et cookies actifs. */
     protected function fromApp(): static
     {

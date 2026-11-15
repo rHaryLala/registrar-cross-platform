@@ -25,7 +25,8 @@ return [
 
     'allowed_headers' => ['*'],
 
-    'exposed_headers' => [],
+    // Le nom du fichier PDF est annoncé par Content-Disposition : sans cela, un site servi depuis un autre domaine ne le voit pas.
+    'exposed_headers' => ['Content-Disposition'],
 
     'max_age' => 600,
 

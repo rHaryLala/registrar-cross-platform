@@ -103,6 +103,20 @@ class LoginTest extends TestCase
         $this->login('ancien')->assertOk();
     }
 
+    public function test_a_converted_legacy_account_stays_logged_in_on_the_next_request(): void
+    {
+        // Régression : la session mémorisait l'ANCIENNE empreinte (sha256) alors que la base venait de passer en bcrypt ;
+        // le middleware AuthenticateSession déconnectait alors l'étudiant à la requête suivante.
+        User::factory()->legacyPassword()->create(['pseudo' => 'ancien3']);
+
+        $this->login('ancien3')->assertOk();
+
+        // Un vrai serveur relit l'utilisateur en base à chaque requête : on oublie celui que la garde a en mémoire.
+        $this->app['auth']->forgetGuards();
+
+        $this->fromApp()->getJson('/api/v1/auth/me')->assertOk()->assertJsonPath('data.role', 'student');
+    }
+
     public function test_a_wrong_password_on_a_legacy_account_leaves_it_untouched(): void
     {
         $user = User::factory()->legacyPassword()->create(['pseudo' => 'ancien2']);

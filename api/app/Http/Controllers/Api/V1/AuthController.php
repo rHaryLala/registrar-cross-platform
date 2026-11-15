@@ -74,7 +74,7 @@ class AuthController extends Controller
         Auth::guard('web')->login($result->user);
         $request->session()->regenerate();
 
-        SecurityLog::record($method === 'google' ? 'google_login_success' : 'login_success', $result->user->id, ['method' => $method]);
+        SecurityLog::record($method === 'google' ? 'google_login_success' : 'login_success', $result->user->id, ['method' => $method, 'via' => $result->via]);
 
         return response()->json(['data' => UserPayload::from($result->user)]);
     }
@@ -89,11 +89,11 @@ class AuthController extends Controller
             };
         }
 
-        if ($reason === 'ambiguous_email') {
-            return new ApiProblem(401, 'auth.ambiguous_email', 'Adresse partagée', 'Cette adresse est liée à plusieurs comptes. Connectez-vous avec votre identifiant.');
+        if (in_array($reason, ['ambiguous_email', 'ambiguous_password'], true)) {
+            return new ApiProblem(401, 'auth.ambiguous_email', 'Adresse partagée', 'Cette adresse est liée à plusieurs comptes. Connectez-vous avec votre matricule ou votre identifiant.');
         }
 
         // Un seul message pour « compte inconnu » et « mauvais mot de passe » : on ne révèle pas quels comptes existent.
-        return new ApiProblem(401, 'auth.invalid_credentials', 'Identifiant ou mot de passe incorrect', 'Vérifiez votre identifiant (pseudo ou adresse e-mail) et votre mot de passe. Étudiants et enseignants : utilisez « Continuer avec Google ».');
+        return new ApiProblem(401, 'auth.invalid_credentials', 'Identifiant ou mot de passe incorrect', 'Vérifiez votre matricule, votre identifiant ou votre adresse e-mail, et votre mot de passe. Si c’est le mot de passe initial commun à plusieurs étudiants, il n’ouvre plus de compte : utilisez « Continuer avec Google » ou demandez un mot de passe personnel au registrariat.');
     }
 }

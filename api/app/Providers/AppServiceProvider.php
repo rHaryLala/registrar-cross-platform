@@ -21,9 +21,21 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->app->bind(
+            \App\Domain\News\SiteArticleParser::class,
+            fn () => new \App\Domain\News\SiteArticleParser((string) config('registrar.site_news.base')),
+        );
+        $this->rateLimiters();
+    }
+
+    private function rateLimiters(): void
+    {
         // 10 tentatives par 15 minutes pour un même identifiant depuis une même adresse IP.
         RateLimiter::for('login', fn (Request $request) => Limit::perMinutes(15, 10)->by(
             mb_strtolower((string) $request->input('identifier', 'google')).'|'.$request->ip()
         ));
+
+        // Quiz : au plus 30 parties démarrées par heure et par compte.
+        RateLimiter::for('quiz-start', fn (Request $request) => Limit::perHour(30)->by('quiz|'.($request->user()?->id ?? $request->ip())));
     }
 }

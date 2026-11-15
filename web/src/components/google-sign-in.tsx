@@ -68,7 +68,7 @@ export function GoogleSignIn({ onCredential, onUnavailable }: { onCredential: (c
   if (!CLIENT_ID) {
     return (
       <p className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
-        La connexion Google n’est pas activée sur cet environnement. Utilisez votre identifiant et votre mot de passe.
+        La connexion Google n’est pas activée sur cet environnement. Utilisez votre matricule (ou votre adresse e-mail) et votre mot de passe.
       </p>
     );
   }

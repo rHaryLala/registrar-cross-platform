@@ -11,11 +11,14 @@ final class LoginResult
         public readonly ?User $user,
         public readonly ?string $reason,
         public readonly ?User $knownUser = null,
+        /** 'account' = mot de passe du compte ; 'student_table' = mot de passe de la fiche étudiante. */
+        public readonly string $via = 'account',
+        public readonly bool $created = false,
     ) {}
 
-    public static function success(User $user): self
+    public static function success(User $user, string $via = 'account', bool $created = false): self
     {
-        return new self($user, null);
+        return new self($user, null, null, $via, $created);
     }
 
     /** @param User|null $knownUser le compte visé, s'il existe (pour le journal seulement) */
