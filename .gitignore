@@ -1,0 +1,14 @@
+# Dépendances et constructions
+/api/vendor/
+/web/node_modules/
+/web/.next/
+/web/out/
+# Secrets et fichiers locaux : jamais dans le dépôt
+.env
+.env.*
+!.env.example
+!.env.production.example
+/api/storage/*.key
+# Données réelles : jamais dans le dépôt (le schéma seul, dans docs/reference/, est autorisé)
+*.sql.gz
+registrar_db.sql

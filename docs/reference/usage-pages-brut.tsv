@@ -1,0 +1,156 @@
+methode	chemin	ajax	appels	utilisateurs	niveaux	duree_moy_ms
+GET	/student	0	5373	24	1,2,3,4,5,6	87
+POST	/api/google-auth	1	2118	204	1,2,3,4,5,6,7,8,9	257
+GET	/tableau-de-bord	0	1988	25	1,2,3,4,5,6	159
+POST	/inscription/app/generate.stage.php	1	1851	12	1,2,3,6	20
+GET	/student/home	0	1686	191	1,2,3,6,8	14
+GET	/inscription/inscription	0	1330	22	1,2,3,4,5,6	38
+GET	/src/data.topdf	0	1181	12	1,2,3,4,6	41
+POST	/queue/api	1	1124	2	1	24
+GET	/etudiants	0	1017	23	1,2,3,4,5,6	42
+POST	/app/.student/updatenote	1	976	6	1,2,3	28
+GET	/student/dashboard	0	970	136	8	222
+POST	/login	0	952	22	1,2,3,4,5,6,8,9	100
+GET	/login	0	903	160	1,2,3,4,5,6,7,8,9	5
+GET	/cours	0	894	9	1,3,6	74
+GET	/dashboard	0	824	114	1,3,4,5,6,8	19
+POST	/app/.student/checkCours.php	1	804	16	1,2,3,6	98
+POST	/app/.student/updateStd	1	786	9	1,3	74
+GET	/finance/authorized-reinscription	0	696	10	1,3,4	53
+GET	/src/data.topdf.php	0	646	4	1,3	22
+POST	/dashboard	0	565	8	1,3,4,6	30
+GET	/student/notes	0	517	127	8	49
+POST	/api/update-dossier	1	479	6	1,3	14
+POST	/work-education	1	479	3	1,3,9	26
+POST	/api/update-authorization	1	474	5	1,4	14
+POST	/inscription/app/mode.payement.php	1	469	5	1,3,6	15
+POST	/inscription/app/recalculer-frais.php	1	452	3	1,3	25
+POST	/inscription/app/generate.student.php	1	418	11	1,2,3,6	42
+GET	/courses	0	398	10	1,3,6	72
+POST	/app/.student/updatePromotionNote	1	397	6	1,3	23
+POST	/src/data.topdf	0	358	9	1,2,3	61
+GET	/settings	0	340	9	1,3,4	24
+POST	/inscription/app/retrait.cours.php	1	325	7	1,6	24
+POST	/app/.cours/updateCours	1	284	8	1,3,6	58
+GET	/candidatures	0	239	7	1,3,6	22
+GET	/students/create	0	234	8	1,2,3	19
+GET	/work-education	0	220	6	1,2,3,9	34
+POST	/app/.presence/enregistrer.php	1	186	5	6,7	29
+GET	/student/info	0	181	98	8	13
+GET	/messagerie	0	177	78	1,2,3,4,5,6,7,8,9	8
+GET	/teacher/presence	1	167	8	6,7	120
+GET	/logout	0	161	75	1,2,3,6,7,8,9	14
+POST	/app/.student/addStd	0	153	6	1,3	1419
+POST	/app/.remise/enregistrer.php	1	147	3	6,7	32
+GET	/session-rankings	0	144	10	1,2,3,4,6	49
+GET	/settings/logs	0	141	1	1	30
+GET	/teacher/dashboard	0	120	13	6,7	55
+GET	/student/inscriptions	0	112	40	8	20
+POST	/app/.cours/save_offered.php	1	107	6	1,3	18
+GET	/courses-sessions	0	101	6	1,3	39
+GET	/inscriptions/tardives	0	98	7	1,2,3,4	53
+GET	/student/presence	0	93	53	8	14
+GET	/student/news	0	89	51	8	12
+GET	/teacher/remise-notes	0	79	12	6,7	150
+POST	/admissions	1	78	0		43
+GET	/professors	0	68	8	1,3,6	25
+GET	/queue	0	66	2	1	38
+GET	/app/.student/del-cours.momentanee.php	1	65	8	1,2,3	38
+POST	/app/.cours/addCours	1	65	3	1,3	18
+GET	/student/quiz	0	64	50	8	10
+POST	/app/finance-bareme.save.php	1	64	2	1	24
+GET	/deans-list	0	63	13	1,2,3,4,5,6	281
+GET	/professor	0	58	7	1,3,6	26
+GET	/schedule	0	58	15	1,2,3,4,5,6	36
+POST	/app/retouche-photo.profil.php	1	55	2	1,5	107
+POST	/app/.student/updtateImgStd.php	0	54	1	1,5	102
+GET	/student/fiche-inscription	0	53	25	8	33
+POST	/candidatures/statut	1	53	4	1,3	1348
+GET	/retouche-photo	0	52	3	1,5	26
+GET	/finance	0	50	2	1	51
+GET	/top-students	0	50	12	1,2,3,4,5,6	277
+GET	/reglement	0	47	13	1,2,3,4,5,6,7	31
+GET	/accounts/create	0	45	1	1	61
+GET	/espace	0	45	15	1,8	4
+GET	/src/gen.pdf	0	42	5	1,3	125
+GET	/student/game	0	40	30	8	9
+POST	/inscriptions/tardives	1	40	2	1	69
+GET	/teacher/presence	0	37	11	1,6,7	125
+GET	/settings/adresses-google	0	35	2	1	34
+GET	/inscription/	0	33	8	1,2,4,6	22
+GET	/my-account	0	33	15	1,2,3,4,5,6,7,9	22
+POST	/app/.user/updateUser	1	32	1	1	91
+POST	/export/students/xlsx	1	32	5	1,3	29
+GET	/settings/bulk-email	1	28	8	1,2,6,7	28
+GET	/remise-notes	0	27	6	1,3	15
+POST	/app/mentions.save.php	1	27	1	1	16
+GET	/settings/bulk-email	0	25	8	1,2,6,7	128
+POST	/api/google-auth	0	23	5	3,8	165
+GET	/choisir-espace	0	22	4	1,2,5,7	10
+POST	/choisir-espace	0	22	5	1,2,5,7	21
+GET	/evaluation	0	21	8	2,3,4,6	15
+GET	/presence	0	21	5	1,3	26
+POST	/candidatures/archiver	1	15	3	1,3	26
+GET	/settings/mentions	0	14	1	1	167
+GET	/teacher/remise-notes	1	13	5	6,7	121
+POST	/app/.student/updateCumulativePromotionNote	1	12	2	3	83
+GET	/qr-generator	0	11	7	1,3,4,5,6	20
+POST	/courses	0	11	2	3	18
+GET	/didacticiel	0	10	5	1,2,3,6	27
+GET	/news	0	10	1	1	25
+POST	/app/espace-etudiant.save.php	1	10	1	1	16
+GET	/app/.student/delStd	0	9	3	1,3	13
+GET	/queue/display	0	9	1	1	7
+GET	/settings/espace-etudiant	0	9	1	1	1731
+POST	/app/.prof/updateProf	1	9	2	1,3	13
+POST	/queue/plan	1	9	1	1	17
+GET	/fusion-pdf	0	8	6	1,3,5,6	17
+POST	/app/studio.visuels.php	1	8	0		28
+POST	/src/genPDF/gen.mail_csv	0	8	2	1	42
+GET	/studio	0	7	3	1,5	20
+POST	/app/.user/updateUser	0	7	1	1	68
+GET	/newsletter	0	6	3	1,2,3	44
+POST	/app/.prof/addProf.php	0	6	2	1,3	25
+POST	/app/.student/updatenote	0	6	2	1,3	30
+POST	/app/.user/mon-compte.save.php	1	6	4	6,7,9	123
+POST	/src/emploi-temps.api	1	6	2	3	19
+GET	/settings/diplome	0	4	2	1,3	35
+POST	/app/.user/add.user	1	4	1	1	87
+GET	/app/.student/recup-cours	0	3	2	1,3	29
+GET	/finance/echeances	0	3	2	1,3	18
+GET	/queue/plan	0	3	1	1	31
+GET	/sessions	0	3	1	1	24
+POST	/app/.annonces/update.annonce	1	3	1	1	82
+GET	/app/.cours/del.cours	0	2	2	1,3	11
+GET	/login-locations	0	2	2	1,3	40
+POST	/app/.student/retrait-universite.php	0	2	1	3	28
+POST	/src/data.topdf_paysage	0	2	2	1	282
+GET	/app/.student/del-cours.definitive	0	1	1	1	33
+GET	/evaluation/form/13	0	1	1	2	9
+GET	/settings/vitrine	0	1	1	1	14
+POST	/app/.annonces/add.annonce	1	1	1	1	870
+POST	/app/.annonces/delete.annonce	1	1	1	1	21
+POST	/app/.cours/updateCours	0	1	0		5
+POST	/app/.presence/enregistrer.php	0	1	0		5
+POST	/app/.presence/traiter.php	0	1	0		4
+POST	/app/.student/annuler-retrait.php	0	1	1	3	47
+POST	/app/.user/add.user.php	0	1	0		3
+POST	/app/finance-frais.save.php	1	1	1	1	17
+POST	/app/messagerie.api.php	1	1	0		4515
+POST	/app/reinscription.save.php	1	1	1	1	362
+POST	/candidatures/archiver	0	1	1	1	28
+POST	/finance/echeances	1	1	1	1	18
+POST	/init/.cours/cours-live	0	1	0		4
+POST	/init/.cours/cours-livesearch	0	1	0		3
+POST	/init/.student/std-live	0	1	0		3
+POST	/init/.student/std-livesearch	0	1	0		2
+POST	/inscription/stages/mode.payement.php	0	1	0		4
+POST	/inscription/stages/session.php	0	1	0		3
+POST	/inscription/stages/top.stages.php	0	1	0		8
+POST	/professors	0	1	1	3	16
+POST	/src/extenssionPrint/tamplate_mail_csv	0	1	0		10
+POST	/src/extenssionPrint/tamplate_mail_csv.php	0	1	0		12
+POST	/src/genPDF/gen.mail_csv.php	0	1	0		3
+POST	/src/genPDF/print/fiche.inscription.php	0	1	0		10
+POST	/src/services/matricule.live	0	1	0		6
+POST	/src/services/parcours.live.addCours	0	1	0		7

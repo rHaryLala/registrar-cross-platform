@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maquette v2 — structure ergonomique Registrar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..900&display=swap" rel="stylesheet">
+<style>
+/* Palette : celle de l'affiche « Semaine de prière » (uaz-website, Studio), et elle seule. */
+:root {
+  --marine-1: #1a2b6a; --marine-2: #13235b; --marine-3: #0e1c4d;
+  --cyan: #00c4d4; --doux: #c9d1f2; --pale: #9aa6dc;
+  --font: 'Inter', ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --r: 12px;
+}
+[data-theme="dark"] {
+  --page: #050608; --bg: #0a0b0f; --rail: #07080b; --card: #10131a; --card-hover: #171b24;
+  --sel: rgba(0,196,212,.12); --line: rgba(255,255,255,.10);
+  --text: #f2f4f8; --text-2: #c8cddb; --text-3: #98a0b3;
+  --accent: var(--cyan); --accent-text: var(--cyan);
+  --primary: var(--cyan); --on-primary: #0a0b0f;
+  --ok: #34d399; --warn: #fbbf24; --bad: #f87171; color-scheme: dark;
+}
+[data-theme="light"] {
+  --page: #e4e6eb; --bg: #f4f5f7; --rail: #14171f; --card: #fff; --card-hover: #eceef2;
+  --sel: rgba(0,114,126,.10); --line: #e1e3e8;
+  --text: #14171f; --text-2: #5b6170; --text-3: #5b6170;
+  --accent: var(--cyan); --accent-text: #00727e;
+  --primary: var(--marine-1); --on-primary: #fff;
+  --ok: #047857; --warn: #b45309; --bad: #b91c1c; color-scheme: light;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--text); font: 400 15px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; }
+a { cursor: pointer; }
+:where(a, button, input, textarea, [tabindex]):focus-visible { outline: 3px solid var(--accent-text); outline-offset: 2px; }
+.rail :focus-visible, .toast :focus-visible { outline-color: var(--cyan); }
+svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.num { font-variant-numeric: tabular-nums; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.k { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-text); }
+.muted { color: var(--text-2); font-size: 14px; margin: 0; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; border: 1px solid currentColor; border-radius: 999px; padding: 2px 10px 2px 8px; white-space: nowrap; }
+.chip::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.chip.ok { color: var(--ok); } .chip.warn { color: var(--warn); } .chip.bad { color: var(--bad); } .chip.info { color: var(--accent-text); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 10px; border: 1px solid transparent; font-weight: 700; font-size: 14px; text-decoration: none; transition: transform .12s ease-out, background-color .15s; }
+.btn:active { transform: scale(.97); }
+.btn.pri { background: var(--primary); color: var(--on-primary); }
+.btn.ghost { background: transparent; color: var(--text); border-color: var(--line); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.block { width: 100%; min-height: 48px; }
+kbd { font: 600 12px/1 var(--font); border: 1px solid currentColor; border-radius: 5px; padding: 2px 6px; opacity: .8; }
+
+/* ---------- présentation ---------- */
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; padding: 20px 16px; max-width: 1500px; margin: 0 auto; }
+.top h1 { margin: 0; font-size: 15px; font-weight: 800; flex: 1 1 280px; } .top h1 small { display: block; font-weight: 500; color: var(--text-3); font-size: 13px; }
+.ctrl { display: flex; gap: 8px; } .ctrl button { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 8px 14px; font-weight: 600; font-size: 13px; min-height: 40px; }
+.ctrl button[aria-pressed="true"] { background: var(--accent); color: var(--marine-3); border-color: transparent; }
+.stage { display: grid; gap: 28px; padding: 0 16px 40px; max-width: 1500px; margin: 0 auto; grid-template-columns: minmax(0, 1fr); align-items: start; }
+.stage > section { min-width: 0; }
+@media (min-width: 1300px) { .stage { grid-template-columns: 400px minmax(0, 1fr); } }
+.legend { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); margin: 0 0 10px; }
+.scroller { overflow-x: auto; border-radius: 16px; }
+.note { max-width: 1500px; margin: 0 auto; padding: 0 16px 48px; color: var(--text-3); font-size: 13px; }
+
+/* ---------- ÉTUDIANT : mobile ---------- */
+.phone { width: 390px; max-width: 100%; margin: 0 auto; background: #05091f; border-radius: 40px; padding: 10px; box-shadow: 0 30px 60px -20px rgba(0,0,0,.6); }
+.screen { height: 800px; border-radius: 30px; overflow: hidden; background: var(--bg); display: flex; flex-direction: column; }
+.appbar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; min-height: 60px; border-bottom: 1px solid var(--line); }
+.appbar img { width: 32px; height: 32px; border-radius: 50%; background: #fff; }
+.appbar h1 { margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -.02em; flex: 1; }
+.sync { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); }
+.sync::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+.avatar { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--card); font-weight: 800; font-size: 14px; }
+.scroll { flex: 1; overflow-y: auto; scrollbar-width: none; padding: 16px 16px 24px; display: grid; gap: 22px; align-content: start; }
+.scroll::-webkit-scrollbar { display: none; }
+.sec { margin: 0 0 10px; font-size: 13px; font-weight: 700; color: var(--text-3); letter-spacing: .04em; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; min-width: 0; }
+.urgent { border-color: var(--accent-text); display: grid; gap: 12px; }
+.urgent .t { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -.01em; line-height: 1.3; }
+.cours { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.cours h3 { margin: 2px 0 4px; font-size: 18px; font-weight: 800; letter-spacing: -.01em; }
+.heure { font-size: 28px; font-weight: 800; letter-spacing: -.03em; line-height: 1; text-align: right; }
+.heure small { display: block; font-size: 12px; font-weight: 600; color: var(--text-3); letter-spacing: 0; margin-top: 4px; }
+.liste { list-style: none; margin: 0; padding: 0; }
+.liste li { border-top: 1px solid var(--line); }
+.liste li:first-child { border-top: 0; }
+.liste a { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 8px 0; color: inherit; text-decoration: none; }
+.liste .n { flex: 1; min-width: 0; } .liste .n b { display: block; font-weight: 700; } .liste .n span { font-size: 13px; color: var(--text-3); }
+.liste .g { font-size: 20px; font-weight: 800; letter-spacing: -.02em; }
+.liste svg.i { color: var(--text-3); width: 18px; height: 18px; }
+.trio { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.trio .card { padding: 12px; }
+.trio .v { font-size: 22px; font-weight: 800; letter-spacing: -.03em; line-height: 1.1; margin: 4px 0 2px; }
+.trio .v small { font-size: 12px; font-weight: 600; color: var(--text-3); letter-spacing: 0; }
+.trio .l { font-size: 12px; font-weight: 600; color: var(--text-3); margin: 0; }
+.trio .e { font-size: 12px; font-weight: 700; margin: 4px 0 0; }
+.e.ok { color: var(--ok); } .e.warn { color: var(--warn); }
+.tabbar { display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--line); background: var(--bg); padding: 4px 4px calc(10px + env(safe-area-inset-bottom, 0px)); }
+.tab { display: grid; justify-items: center; align-content: center; gap: 2px; min-height: 56px; font-size: 12px; font-weight: 700; color: var(--text-3); text-decoration: none; position: relative; transition: transform .12s; }
+.tab:active { transform: scale(.96); }
+.tab[aria-current] { color: var(--accent-text); }
+.tab[aria-current]::before { content: ''; position: absolute; top: -5px; width: 28px; height: 3px; border-radius: 2px; background: var(--cyan); }
+
+/* ---------- REGISTRARIAT : bureau, liste + détail ---------- */
+.desk { display: grid; grid-template-columns: 208px minmax(0, 1fr); min-width: 980px; height: 760px; background: var(--bg); border-radius: 16px; overflow: hidden; border: 1px solid var(--line); }
+.rail { background: var(--rail); padding: 16px 12px; display: flex; flex-direction: column; gap: 2px; }
+.rail .marque { display: flex; align-items: center; gap: 10px; padding: 0 6px 14px; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,.13); color: #fff; font-weight: 800; font-size: 15px; line-height: 1.15; }
+.rail .marque img { width: 36px; height: 36px; border-radius: 50%; background: #fff; }
+.rail .marque span { display: block; font-size: 11px; font-weight: 600; color: var(--pale); letter-spacing: .04em; }
+.rail a { display: flex; align-items: center; gap: 12px; padding: 0 12px; min-height: 42px; border-radius: 10px; color: #98a0b3; text-decoration: none; font-weight: 600; font-size: 14px; }
+.rail a:hover { background: rgba(255,255,255,.07); color: #fff; }
+.rail a[aria-current] { background: rgba(0,196,212,.14); color: #fff; box-shadow: inset 3px 0 0 var(--cyan); }
+.rail a .b { margin-left: auto; background: var(--cyan); color: var(--marine-3); font-size: 12px; font-weight: 800; border-radius: 999px; padding: 0 8px; }
+.rail .moi { margin-top: auto; padding: 12px 8px 0; border-top: 1px solid rgba(255,255,255,.13); font-size: 13px; color: var(--pale); }
+.rail .moi b { color: #fff; display: block; }
+.mainc { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.bar { display: flex; align-items: center; gap: 16px; padding: 10px 20px; border-bottom: 1px solid var(--line); min-height: 60px; }
+.crumb { font-size: 14px; color: var(--text-3); } .crumb b { color: var(--text); font-weight: 700; }
+.search { flex: 1; max-width: 420px; margin-left: auto; display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 0 12px; min-height: 42px; color: var(--text-3); font-size: 14px; }
+.search kbd { margin-left: auto; }
+.bar .sync { white-space: nowrap; }
+.sess { display: flex; align-items: center; gap: 16px; padding: 10px 20px; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--text-2); flex-wrap: wrap; }
+.sess b { color: var(--text); }
+.sess .j { margin-left: auto; font-weight: 700; color: var(--accent-text); }
+.tools { display: flex; align-items: center; gap: 12px; padding: 10px 20px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+[role="tablist"] { display: flex; gap: 4px; }
+[role="tab"] { background: transparent; border: 1px solid transparent; border-radius: 999px; min-height: 40px; padding: 0 14px; font-weight: 600; font-size: 14px; color: var(--text-2); }
+[role="tab"][aria-selected="true"] { background: var(--sel); border-color: var(--accent-text); color: var(--text); }
+[role="tab"] .c { margin-left: 6px; font-weight: 800; color: var(--accent-text); }
+.tools .btn { margin-left: auto; min-height: 40px; }
+.split { display: grid; grid-template-columns: 340px minmax(0, 1fr); flex: 1; min-height: 0; }
+.lst { border-right: 1px solid var(--line); overflow-y: auto; list-style: none; margin: 0; padding: 0; }
+.lst li { border-bottom: 1px solid var(--line); }
+.it { display: block; width: 100%; text-align: left; background: transparent; border: 0; padding: 12px 16px 12px 18px; min-height: 76px; position: relative; }
+.it:hover { background: var(--card-hover); }
+.it[aria-current="true"] { background: var(--sel); }
+.it[aria-current="true"]::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--cyan); }
+.it .r1 { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.it b { font-weight: 700; }
+.it .r2 { font-size: 13px; color: var(--text-3); margin-top: 2px; }
+.it > .r2, .it > .r3 { display: block; }
+.it .r3 { margin-top: 6px; }
+.det { overflow-y: auto; padding: 22px 28px 0; display: flex; flex-direction: column; min-width: 0; animation: ent .16s ease-out; }
+@keyframes ent { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.det h2 { margin: 2px 0 4px; font-size: 24px; font-weight: 800; letter-spacing: -.02em; }
+.stats { display: flex; gap: 28px; margin: 18px 0; flex-wrap: wrap; }
+.stats div { min-width: 70px; } .stats b { display: block; font-size: 22px; font-weight: 800; letter-spacing: -.02em; } .stats span { font-size: 12px; color: var(--text-3); font-weight: 600; }
+.alert { border: 1px solid var(--warn); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.alert b { color: var(--warn); display: block; margin-bottom: 4px; } .alert ul { margin: 0; padding-left: 18px; font-size: 14px; }
+.okline { color: var(--ok); font-weight: 600; margin: 0 0 16px; font-size: 14px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); padding: 0 8px 8px; border-bottom: 1px solid var(--line); }
+td { padding: 10px 8px; border-bottom: 1px solid var(--line); }
+td.g { text-align: right; font-weight: 700; } th.g { text-align: right; }
+tr.flag td { background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.lien { display: inline-block; margin: 12px 0 0; color: var(--accent-text); font-weight: 700; font-size: 14px; }
+dl.champs { display: grid; grid-template-columns: 160px 1fr; gap: 10px 16px; margin: 18px 0; font-size: 14px; } dl.champs dt { color: var(--text-3); font-weight: 600; } dl.champs dd { margin: 0; font-weight: 600; }
+.actions { position: sticky; bottom: 0; margin-top: auto; background: var(--bg); border-top: 1px solid var(--line); padding: 14px 0 16px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.actions .btn kbd { margin-left: 4px; }
+.actions .hint { margin-left: auto; font-size: 12px; color: var(--text-3); }
+form.ret { margin: 16px 0; display: grid; gap: 8px; }
+form.ret[hidden] { display: none; }
+form.ret label { font-weight: 700; font-size: 14px; }
+form.ret textarea { width: 100%; background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font: inherit; resize: vertical; }
+form.ret textarea[aria-invalid="true"] { border-color: var(--bad); }
+.err { margin: 0; color: var(--bad); font-size: 13px; font-weight: 600; min-height: 0; }
+.vide { margin: auto; text-align: center; padding: 40px 24px; max-width: 36ch; }
+.vide h2 { font-size: 20px; margin: 0 0 6px; } .vide p { color: var(--text-2); margin: 0; }
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 100; display: flex; align-items: center; gap: 12px; background: var(--marine-1); color: #fff; border: 1px solid rgba(255,255,255,.2); border-radius: 12px; padding: 8px 10px 8px 16px; box-shadow: 0 16px 40px -12px rgba(0,0,0,.6); max-width: calc(100vw - 32px); }
+.toast[hidden] { display: none; } .toast .btn.ghost { color: #fff; border-color: rgba(255,255,255,.35); min-height: 40px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="home" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></symbol>
+  <symbol id="notes" viewBox="0 0 24 24"><path d="M4 4.5A2.5 2.5 0 016.5 2H20v17H6.5A2.5 2.5 0 004 21.5z"/><path d="M4 21.5V4.5M9 7h6"/></symbol>
+  <symbol id="presence" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9.5h18M8 3v3M16 3v3M9 15l2 2 4-4"/></symbol>
+  <symbol id="msg" viewBox="0 0 24 24"><path d="M21 12a8 8 0 01-11.6 7.1L3 21l1.9-5.4A8 8 0 1121 12z"/></symbol>
+  <symbol id="plus" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+  <symbol id="users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5M16 4.5a3.5 3.5 0 010 7M18 14.8c1.9.7 3.2 2.4 3.5 5.2"/></symbol>
+  <symbol id="check" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12l3 3 5-6"/></symbol>
+  <symbol id="wallet" viewBox="0 0 24 24"><path d="M3 7h16a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M3 7l12-4v4"/><circle cx="17" cy="13.5" r="1"/></symbol>
+  <symbol id="inbox" viewBox="0 0 24 24"><path d="M3 13l3-8h12l3 8"/><path d="M3 13v6h18v-6h-5l-1.5 2h-5L8 13z"/></symbol>
+  <symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
+  <symbol id="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+</svg>
+
+<header class="top">
+  <h1>Maquette v2 — structure ergonomique<small>Accent cyan de l’affiche « Semaine de prière » ; fonds neutres. Données fictives. Clavier : J / K, V, R, Ctrl K.</small></h1>
+  <div class="ctrl" role="group" aria-label="Thème">
+    <button type="button" data-theme-btn="dark" aria-pressed="true">Thème sombre</button>
+    <button type="button" data-theme-btn="light" aria-pressed="false">Thème clair</button>
+  </div>
+</header>
+
+<main class="stage">
+
+<!-- ================= ÉTUDIANT ================= -->
+<section aria-labelledby="l-etu">
+  <p class="legend" id="l-etu">Étudiant · téléphone</p>
+  <div class="phone">
+    <div class="screen">
+      <header class="appbar">
+        <img src="assets/sceau-uaz.png" alt="Université Adventiste Zurcher">
+        <h1>Accueil</h1>
+        <span class="sync">À jour</span>
+        <button class="avatar" type="button" aria-label="Mon compte : Fanja R.">FR</button>
+      </header>
+      <div class="scroll">
+        <section aria-labelledby="h1a">
+          <h2 class="sec" id="h1a">À faire maintenant</h2>
+          <article class="card urgent">
+            <div><p class="k">Réinscription</p><p class="t">Ouverte jusqu’au 30 novembre : il reste 16 jours.</p></div>
+            <a class="btn pri block" href="#">Commencer ma réinscription <svg class="i"><use href="#arrow"/></svg></a>
+          </article>
+        </section>
+
+        <section aria-labelledby="h1b">
+          <h2 class="sec" id="h1b">Aujourd’hui</h2>
+          <article class="card cours">
+            <div><p class="k">Prochain cours</p><h3>Algorithmique II</h3><p class="muted">Salle B12 · Dr Rabe</p></div>
+            <div class="heure num">08 h 00<small>dans 2 h</small></div>
+          </article>
+        </section>
+
+        <section aria-labelledby="h1c">
+          <h2 class="sec" id="h1c">Nouveautés</h2>
+          <article class="card" style="padding:4px 16px">
+            <ul class="liste">
+              <li><a href="#"><div class="n"><b>Algorithmique II</b><span>Note publiée aujourd’hui</span></div><span class="chip info">Nouveau</span><span class="g num">14,5</span><svg class="i"><use href="#chev"/></svg></a></li>
+              <li><a href="#"><div class="n"><b>Anglais</b><span>Note publiée aujourd’hui</span></div><span class="chip info">Nouveau</span><span class="g num">15,0</span><svg class="i"><use href="#chev"/></svg></a></li>
+              <li><a href="#"><div class="n"><b>Base de données</b><span>Note publiée le 10 nov.</span></div><span class="g num">12,0</span><svg class="i"><use href="#chev"/></svg></a></li>
+            </ul>
+          </article>
+        </section>
+
+        <section aria-labelledby="h1d">
+          <h2 class="sec" id="h1d">Mon suivi</h2>
+          <div class="trio">
+            <article class="card"><p class="l">Moyenne S1</p><p class="v num">13,42<small>/20</small></p><p class="e ok">Réussite</p></article>
+            <article class="card"><p class="l">Présence</p><p class="v num">95<small> %</small></p><p class="e ok">Limite : 85 %</p></article>
+            <article class="card"><p class="l">Solde</p><p class="v num">180 k<small> Ar</small></p><p class="e warn">Avant le 30 nov.</p></article>
+          </div>
+        </section>
+      </div>
+      <nav class="tabbar" aria-label="Navigation principale">
+        <a class="tab" href="#" aria-current="page"><svg class="i"><use href="#home"/></svg>Accueil</a>
+        <a class="tab" href="#"><svg class="i"><use href="#notes"/></svg>Notes</a>
+        <a class="tab" href="#"><svg class="i"><use href="#presence"/></svg>Présence</a>
+        <a class="tab" href="#"><svg class="i"><use href="#msg"/></svg>Messages</a>
+        <a class="tab" href="#"><svg class="i"><use href="#plus"/></svg>Plus</a>
+      </nav>
+    </div>
+  </div>
+</section>
+
+<!-- ================= REGISTRARIAT ================= -->
+<section aria-labelledby="l-reg">
+  <p class="legend" id="l-reg">Registrariat · ordinateur</p>
+  <div class="scroller">
+    <div class="desk">
+      <aside class="rail" aria-label="Navigation">
+        <div class="marque"><img src="assets/sceau-uaz.png" alt=""><div>Registrar<span>Zurcher</span></div></div>
+        <a href="#" aria-current="page"><svg class="i"><use href="#check"/></svg>À traiter <span class="b" id="rail-n">6</span></a>
+        <a href="#"><svg class="i"><use href="#users"/></svg>Étudiants</a>
+        <a href="#"><svg class="i"><use href="#notes"/></svg>Cours et notes</a>
+        <a href="#"><svg class="i"><use href="#inbox"/></svg>Admissions</a>
+        <a href="#"><svg class="i"><use href="#wallet"/></svg>Finance</a>
+        <a href="#"><svg class="i"><use href="#presence"/></svg>Assiduité</a>
+        <a href="#"><svg class="i"><use href="#msg"/></svg>Messages</a>
+        <div class="moi"><b>Registrariat</b>Session 1 · 2026–27</div>
+      </aside>
+
+      <div class="mainc">
+        <div class="bar">
+          <div class="crumb">Accueil / <b>À traiter</b></div>
+          <div class="search"><svg class="i"><use href="#search"/></svg>Chercher un étudiant, un cours<kbd>Ctrl K</kbd></div>
+          <span class="sync">En ligne</span>
+        </div>
+        <div class="sess"><span><b>Session 1</b> · examens du 24 nov. au 5 déc.</span><span>Réinscription jusqu’au 30 nov.</span><span class="j num">J − 10</span></div>
+        <div class="tools">
+          <div role="tablist" aria-label="Type de demande" id="onglets"></div>
+          <button class="btn ghost" id="sans-anom" type="button"></button>
+        </div>
+        <div class="split">
+          <ul class="lst" id="liste" aria-label="Demandes à traiter"></ul>
+          <section class="det" id="detail" aria-live="polite" aria-label="Détail de la demande"></section>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+<p class="note">Fictif : noms, notes, effectifs, montants. Sur téléphone, la vue liste + détail devient deux écrans successifs (liste, puis détail avec retour). En production, Inter et le sceau sont servis par l’application.</p>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toast-t"></span><button class="btn ghost" id="toast-undo" type="button">Annuler</button></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+(function () {
+  var root = document.documentElement;
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches || location.hash.indexOf('statique') > -1;
+  function setTheme(t) { root.dataset.theme = t; document.querySelectorAll('[data-theme-btn]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.themeBtn === t)); }); }
+  document.querySelectorAll('[data-theme-btn]').forEach(function (b) { b.addEventListener('click', function () { setTheme(b.dataset.themeBtn); }); });
+  if (location.hash.indexOf('clair') > -1 || matchMedia('(prefers-color-scheme: light)').matches) setTheme('light');
+
+  /* ---------------- données fictives ---------------- */
+  var N6 = [['UAZ-24-0187', 'Fanja R.', '14,5'], ['UAZ-24-0192', 'Tojo A.', '11,0'], ['UAZ-24-0201', 'Hanitra M.', '16,0'], ['UAZ-24-0212', 'Lova R.', 'Absent'], ['UAZ-24-0219', 'Mamy T.', '9,5'], ['UAZ-24-0230', 'Sitraka N.', '13,0']];
+  var items = [
+    { id: 1, type: 'notes', titre: 'Algorithmique II', sous: 'Licence 2 · Informatique', src: 'Dr Rabe', age: 'il y a 2 h', n: 42, st: { moy: '12,8', min: '3,0', max: '19,5', abs: 2 }, anom: ['Une note manque : UAZ-24-0212 (marqué absent, sans justificatif).', 'La moyenne monte de 6,1 points par rapport à la session précédente.'], notes: N6, flag: 3 },
+    { id: 2, type: 'notes', titre: 'Base de données', sous: 'Licence 2 · Informatique', src: 'Mme Hanta', age: 'il y a 5 h', n: 36, st: { moy: '12,1', min: '5,0', max: '18,0', abs: 0 }, anom: [], notes: N6.map(function (r, i) { return i === 3 ? [r[0], r[1], '10,5'] : r; }), flag: -1 },
+    { id: 3, type: 'notes', titre: 'Mathématiques', sous: 'Licence 1 · Gestion', src: 'M. Andry', age: 'hier', n: 51, st: { moy: '10,9', min: '2,0', max: '17,5', abs: 1 }, anom: [], notes: N6, flag: -1 },
+    { id: 4, type: 'notes', titre: 'Anglais', sous: 'Licence 3 · Théologie', src: 'Mme Voahirana', age: 'hier', n: 38, st: { moy: '14,2', min: '8,0', max: '19,0', abs: 0 }, anom: [], notes: N6, flag: -1 },
+    { id: 5, type: 'candidatures', titre: 'Licence 1 Gestion', sous: 'Dossier complet', src: 'Admissions en ligne', age: 'hier', champs: [['Candidat·e', 'Voahangy R.'], ['Baccalauréat', 'Série C, 2026'], ['Pièces', '7 sur 7 reçues'], ['Frais de dossier', 'Payés']], oui: 'Accepter', non: 'Refuser' },
+    { id: 6, type: 'reinscriptions', titre: 'Autorisation de réinscription', sous: 'Solde réglé', src: 'Caisse', age: '12 nov.', champs: [['Étudiant', 'UAZ-23-0145'], ['Solde', '0 Ar'], ['Dernière session', 'Validée']], oui: 'Autoriser', non: 'Refuser' }
+  ];
+  var TYPES = [['tout', 'Tout'], ['notes', 'Notes'], ['candidatures', 'Candidatures'], ['reinscriptions', 'Réinscriptions']];
+  var filtre = 'tout', sel = 1, historique = null, timer;
+
+  var elListe = document.getElementById('liste'), elDet = document.getElementById('detail'), elOnglets = document.getElementById('onglets');
+  var elSans = document.getElementById('sans-anom'), toast = document.getElementById('toast');
+  var LIBELLE = { notes: 'Remise de notes', candidatures: 'Candidature', reinscriptions: 'Réinscription' };
+
+  function visibles() { return items.filter(function (i) { return !i.fait && (filtre === 'tout' || i.type === filtre); }); }
+  function etat(i) { return i.anom && i.anom.length ? '<span class="chip warn">' + i.anom.length + ' point' + (i.anom.length > 1 ? 's' : '') + ' d’attention</span>' : '<span class="chip ok">Prêt à valider</span>'; }
+
+  function dessinerOnglets() {
+    elOnglets.innerHTML = TYPES.map(function (t) {
+      var n = items.filter(function (i) { return !i.fait && (t[0] === 'tout' || i.type === t[0]); }).length;
+      return '<button role="tab" type="button" data-f="' + t[0] + '" tabindex="' + (filtre === t[0] ? 0 : -1) + '" aria-selected="' + (filtre === t[0]) + '">' + t[1] + '<span class="c num">' + n + '</span></button>';
+    }).join('');
+    var sans = items.filter(function (i) { return !i.fait && i.type === 'notes' && !i.anom.length; });
+    elSans.textContent = 'Valider les ' + sans.length + ' sans point d’attention';
+    elSans.hidden = sans.length === 0;
+    document.getElementById('rail-n').textContent = items.filter(function (i) { return !i.fait; }).length;
+  }
+
+  function dessinerListe() {
+    var v = visibles();
+    if (!v.some(function (i) { return i.id === sel; })) sel = v.length ? v[0].id : null;
+    elListe.innerHTML = v.map(function (i) {
+      return '<li><button class="it" type="button" data-id="' + i.id + '" aria-current="' + (i.id === sel) + '">' +
+        '<span class="r1"><b>' + i.titre + '</b><span class="r2" style="margin:0">' + i.age + '</span></span>' +
+        '<span class="r2">' + LIBELLE[i.type] + ' · ' + i.src + '</span>' +
+        '<span class="r3">' + (i.type === 'notes' ? etat(i) : '<span class="chip info">À instruire</span>') + '</span></button></li>';
+    }).join('');
+  }
+
+  function dessinerDetail(anime) {
+    var i = items.filter(function (x) { return x.id === sel; })[0];
+    if (!i) { elDet.innerHTML = '<div class="vide"><h2>Tout est traité</h2><p>Aucune demande en attente pour ce filtre. Les prochaines remises de notes apparaîtront ici.</p></div>'; return; }
+    var h = '<p class="k">' + LIBELLE[i.type] + '</p><h2>' + i.titre + '</h2><p class="muted">' + i.sous + ' · ' + i.src + ' · ' + i.age + (i.n ? ' · ' + i.n + ' étudiants' : '') + '</p>';
+    var ok, non;
+    if (i.type === 'notes') {
+      h += '<div class="stats"><div><b class="num">' + i.st.moy + '</b><span>Moyenne</span></div><div><b class="num">' + i.st.min + '</b><span>Plus basse</span></div><div><b class="num">' + i.st.max + '</b><span>Plus haute</span></div><div><b class="num">' + i.st.abs + '</b><span>Absents</span></div></div>';
+      h += i.anom.length ? '<div class="alert" role="note"><b>' + i.anom.length + ' point' + (i.anom.length > 1 ? 's' : '') + ' d’attention</b><ul>' + i.anom.map(function (a) { return '<li>' + a + '</li>'; }).join('') + '</ul></div>' : '<p class="okline">Aucun point d’attention : notes complètes et cohérentes.</p>';
+      h += '<table><thead><tr><th>Matricule</th><th>Étudiant</th><th class="g">Note /20</th></tr></thead><tbody>' + i.notes.map(function (r, k) { return '<tr' + (k === i.flag ? ' class="flag"' : '') + '><td class="num">' + r[0] + '</td><td>' + r[1] + '</td><td class="g num">' + r[2] + '</td></tr>'; }).join('') + '</tbody></table><a class="lien" href="#">Voir les ' + i.n + ' notes</a>';
+      ok = i.anom.length ? 'Valider malgré tout' : 'Valider'; non = 'Renvoyer à l’enseignant';
+    } else {
+      h += '<dl class="champs">' + i.champs.map(function (c) { return '<dt>' + c[0] + '</dt><dd>' + c[1] + '</dd>'; }).join('') + '</dl>';
+      ok = i.oui; non = i.non;
+    }
+    h += '<form class="ret" id="ret" hidden novalidate><label for="motif">Motif du renvoi (obligatoire)</label><textarea id="motif" rows="3" aria-describedby="motif-err"></textarea><p class="err" id="motif-err" role="alert"></p><div style="display:flex;gap:8px"><button class="btn pri" type="submit">Envoyer le motif</button><button class="btn ghost" id="ret-x" type="button">Annuler</button></div></form>';
+    h += '<div class="actions"><button class="btn pri" id="a-ok" type="button">' + ok + ' <kbd>V</kbd></button><button class="btn ghost" id="a-non" type="button">' + non + ' <kbd>R</kbd></button><span class="hint"><kbd>J</kbd> <kbd>K</kbd> pour parcourir</span></div>';
+    elDet.innerHTML = h;
+    if (anime === false) elDet.style.animation = 'none'; else { elDet.style.animation = 'none'; void elDet.offsetWidth; elDet.style.animation = ''; }
+  }
+
+  function tout(anime) { dessinerOnglets(); dessinerListe(); dessinerDetail(anime); }
+
+  function afficherToast(txt, annuler) {
+    clearTimeout(timer);
+    document.getElementById('toast-t').textContent = txt; toast.hidden = false;
+    document.getElementById('toast-undo').onclick = function () { annuler(); toast.hidden = true; };
+    timer = setTimeout(function () { toast.hidden = true; }, 6000);
+  }
+
+  function traiter(ids, verbe) {
+    var avant = sel, v = visibles(), pos = v.findIndex(function (i) { return i.id === sel; });
+    items.forEach(function (i) { if (ids.indexOf(i.id) > -1) i.fait = true; });
+    var reste = visibles(); sel = reste.length ? (reste[Math.min(pos, reste.length - 1)] || reste[0]).id : null;
+    tout(); focusItem();
+    afficherToast(ids.length + (ids.length > 1 ? ' demandes ' : ' demande ') + verbe + (ids.length > 1 ? 's' : ''), function () {
+      items.forEach(function (i) { if (ids.indexOf(i.id) > -1) i.fait = false; }); sel = avant; tout(); focusItem();
+    });
+  }
+  function focusItem() { var b = elListe.querySelector('[aria-current="true"]') || elOnglets.querySelector('[aria-selected="true"]'); if (b) b.focus({ preventScroll: true }); }
+
+  function courant() { return items.filter(function (i) { return i.id === sel; })[0]; }
+  function valider() { var c = courant(); if (c) traiter([c.id], c.type === 'notes' ? 'validée' : (c.oui === 'Accepter' ? 'acceptée' : 'autorisée')); }
+  function ouvrirRenvoi() { var f = document.getElementById('ret'); if (!f) return; f.hidden = false; document.getElementById('motif').focus(); }
+  function naviguer(d) { var v = visibles(), p = v.findIndex(function (i) { return i.id === sel; }); var n = v[p + d]; if (!n) return; sel = n.id; dessinerListe(); dessinerDetail(); focusItem(); }
+
+  /* ---------------- événements ---------------- */
+  function choisirOnglet(f) { filtre = f; tout(); var b = elOnglets.querySelector('[aria-selected="true"]'); if (b) b.focus(); } /* les boutons sont recréés : on rend le focus à l'onglet actif */
+  elOnglets.addEventListener('click', function (e) { var b = e.target.closest('[role=tab]'); if (b) choisirOnglet(b.dataset.f); });
+  elOnglets.addEventListener('keydown', function (e) {
+    var d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0; if (!d) return;
+    e.preventDefault(); e.stopPropagation();
+    var i = TYPES.findIndex(function (t) { return t[0] === filtre; });
+    choisirOnglet(TYPES[(i + d + TYPES.length) % TYPES.length][0]);
+  });
+  elListe.addEventListener('click', function (e) { var b = e.target.closest('.it'); if (!b) return; sel = Number(b.dataset.id); dessinerListe(); dessinerDetail(); focusItem(); });
+  elSans.addEventListener('click', function () {
+    var ids = items.filter(function (i) { return !i.fait && i.type === 'notes' && !i.anom.length; }).map(function (i) { return i.id; });
+    if (ids.length) traiter(ids, 'validée');
+  });
+  elDet.addEventListener('click', function (e) {
+    if (e.target.closest('#a-ok')) valider();
+    else if (e.target.closest('#a-non')) { var c = courant(); if (c && c.type === 'notes') ouvrirRenvoi(); else if (c) traiter([c.id], 'refusée'); }
+    else if (e.target.closest('#ret-x')) document.getElementById('ret').hidden = true;
+  });
+  elDet.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var m = document.getElementById('motif'), err = document.getElementById('motif-err');
+    if (!m.value.trim()) { m.setAttribute('aria-invalid', 'true'); err.textContent = 'Indiquez le motif : l’enseignant le recevra avec la remise.'; m.focus(); return; }
+    var c = courant(); traiter([c.id], 'renvoyée');
+  });
+  document.addEventListener('keydown', function (e) {
+    var t = e.target; if (t.matches('input, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
+    var k = e.key.toLowerCase();
+    if (k === 'j' || k === 'arrowdown' && t.closest('#liste')) { e.preventDefault(); naviguer(1); }
+    else if (k === 'k' || k === 'arrowup' && t.closest('#liste')) { e.preventDefault(); naviguer(-1); }
+    else if (k === 'v') { e.preventDefault(); valider(); }
+    else if (k === 'r') { e.preventDefault(); var c = courant(); if (c && c.type === 'notes') ouvrirRenvoi(); }
+  });
+
+  tout(false);
+
+  /* Une seule animation, courte : les lignes de la liste apparaissent en cascade (30 ms) à l'ouverture. */
+  if (window.gsap && !reduce) {
+    gsap.from('.lst li, .scroll > section, .rail a', { opacity: 0, y: 8, duration: .3, stagger: .03, ease: 'power2.out', clearProps: 'transform,opacity' });
+  }
+})();
+</script>
+</body>
+</html>

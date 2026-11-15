@@ -1,0 +1,13 @@
+; Pool PHP-FPM dédié à l'API (à placer dans /etc/php/8.3/fpm/pool.d/). Exemple non testé.
+[registrar-api]
+user = www-data
+group = www-data
+listen = /run/php/php8.3-fpm-registrar-api.sock
+listen.owner = www-data
+listen.group = www-data
+pm = ondemand
+pm.max_children = 8          ; la machine est partagée avec Moodle : on borne
+pm.process_idle_timeout = 30s
+php_admin_value[error_log] = /var/log/php8.3-fpm-registrar-api.log
+php_admin_flag[log_errors] = on
+php_admin_flag[display_errors] = off

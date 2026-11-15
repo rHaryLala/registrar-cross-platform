@@ -1,0 +1,638 @@
+[
+  {
+    "categorie": "HISTOIRE & FONDATION",
+    "question": "En quelle année l'Université Adventiste Zurcher a-t-elle été fondée ?",
+    "bonne_reponse": "1996",
+    "mauvaises_reponses": [
+      "1962",
+      "1935"
+    ],
+    "icone": "🏛️",
+    "indice": "L'UAZ existe déjà depuis trente ans.",
+    "empreinte": "785f9a2fcde7e1c7925ce4c909a97ed3f83a33ff"
+  },
+  {
+    "categorie": "HISTOIRE & FONDATION",
+    "question": "Quel est le nom du fondateur de l'UAZ ?",
+    "bonne_reponse": "Jean Rudolf Zurcher",
+    "mauvaises_reponses": [
+      "Jean Nussbaum Pichot",
+      "Albert Schweitzer Zurcher"
+    ],
+    "icone": "👤",
+    "indice": "L'université porte son nom !",
+    "empreinte": "f138c3d31afcf1c1f26829acde8311ab5a5b7747"
+  },
+  {
+    "categorie": "HISTOIRE & FONDATION",
+    "question": "Avant de devenir université, l'UAZ était quel type d'établissement ?",
+    "bonne_reponse": "Un séminaire théologique",
+    "mauvaises_reponses": [
+      "Un lycée technique",
+      "Une école primaire"
+    ],
+    "icone": "📜",
+    "indice": "L'enseignement religieux était au cœur de ses débuts.",
+    "empreinte": "9de1d6e1a449674bbce38682c9a6f6a725e758dd"
+  },
+  {
+    "categorie": "HISTOIRE & FONDATION",
+    "question": "L'UAZ fait partie de quel réseau mondial d'universités ?",
+    "bonne_reponse": "Le réseau éducatif adventiste",
+    "mauvaises_reponses": [
+      "L'Alliance Francophone",
+      "Le réseau UNESCO"
+    ],
+    "icone": "🌍",
+    "indice": "C'est lié à la confession religieuse de l'université.",
+    "empreinte": "a5d0b6a1f2ff9a91643425756f6132b76c9a4ccb"
+  },
+  {
+    "categorie": "HISTOIRE & FONDATION",
+    "question": "Quel sigle désigne l'Université Adventiste Zurcher ?",
+    "bonne_reponse": "UAZ",
+    "mauvaises_reponses": [
+      "UZA",
+      "ZUA"
+    ],
+    "icone": "🔤",
+    "indice": "L'ordre suit : Université, Adventiste, Zurcher.",
+    "empreinte": "12d25b58aae1dc675b9240cfbc02468847b7ff22"
+  },
+  {
+    "categorie": "HISTOIRE & FONDATION",
+    "question": "L'UAZ porte le nom de famille de son fondateur. De quel pays était-il originaire ?",
+    "bonne_reponse": "Suisse",
+    "mauvaises_reponses": [
+      "France",
+      "Allemagne"
+    ],
+    "icone": "🇨🇭",
+    "indice": "Le nom 'Zurcher' a une consonance germanique.",
+    "empreinte": "947478348f6c0b1be5e3f458d637fa1acd9c54ee"
+  },
+  {
+    "categorie": "GÉOGRAPHIE & LOCALISATION",
+    "question": "Dans quel district de Madagascar se trouve l'UAZ ?",
+    "bonne_reponse": "Antsirabe",
+    "mauvaises_reponses": [
+      "Antananarivo",
+      "Fianarantsoa"
+    ],
+    "icone": "📍",
+    "indice": "C'est la ville d'eau.",
+    "empreinte": "dd528103aa9d7a6ea6bec2475cb02576a91a2d25"
+  },
+  {
+    "categorie": "GÉOGRAPHIE & LOCALISATION",
+    "question": "Dans quelle région de Madagascar se situe Antsirabe ?",
+    "bonne_reponse": "Vakinankaratra",
+    "mauvaises_reponses": [
+      "Analamanga",
+      "Haute Matsiatra"
+    ],
+    "icone": "🗺️",
+    "indice": "C'est une région des Hautes Terres centrales.",
+    "empreinte": "7632ab97c7d79a029f3e016dab46092935c82466"
+  },
+  {
+    "categorie": "GÉOGRAPHIE & LOCALISATION",
+    "question": "Quel est le surnom donné à Antsirabe ?",
+    "bonne_reponse": "La ville d'eau",
+    "mauvaises_reponses": [
+      "La ville lumière",
+      "La cité du soleil"
+    ],
+    "icone": "💧",
+    "indice": "La ville est connue pour ses sources thermales.",
+    "empreinte": "76733ef2292a1d05524164e261a4706a50ab6d8d"
+  },
+  {
+    "categorie": "GÉOGRAPHIE & LOCALISATION",
+    "question": "Quel est l'altitude approximative d'Antsirabe ?",
+    "bonne_reponse": "1 500 mètres",
+    "mauvaises_reponses": [
+      "800 mètres",
+      "2 200 mètres"
+    ],
+    "icone": "⛰️",
+    "indice": "C'est sur les Hautes Terres, mais pas le sommet.",
+    "empreinte": "16c244c5995ca8665c8d7b9784f158abdbcaef46"
+  },
+  {
+    "categorie": "GÉOGRAPHIE & LOCALISATION",
+    "question": "Quel est le climat prédominant à Antsirabe ?",
+    "bonne_reponse": "Tropical d'altitude",
+    "mauvaises_reponses": [
+      "Équatorial humide",
+      "Semi-aride"
+    ],
+    "icone": "🌡️",
+    "indice": "L'altitude modifie le climat tropical habituel.",
+    "empreinte": "65bec8324b1fd0b32668d5ebc43ea4f63a81d603"
+  },
+  {
+    "categorie": "GÉOGRAPHIE & LOCALISATION",
+    "question": "Quelle est la province historique dans laquelle se trouve Antsirabe ?",
+    "bonne_reponse": "Antananarivo",
+    "mauvaises_reponses": [
+      "Toamasina",
+      "Mahajanga"
+    ],
+    "icone": "🏘️",
+    "indice": "C'est la même province que la capitale.",
+    "empreinte": "1599837c4dd79e94e15a76ebc15af9840df09efe"
+  },
+  {
+    "categorie": "GÉOGRAPHIE & LOCALISATION",
+    "question": "À quelle distance approximative d'Antananarivo se trouve Antsirabe ?",
+    "bonne_reponse": "170 km",
+    "mauvaises_reponses": [
+      "80 km",
+      "350 km"
+    ],
+    "icone": "🚗",
+    "indice": "C'est environ 3-4 heures de route.",
+    "empreinte": "bfd213caf3b49537b6c1b676ac679c36cc9ba2ac"
+  },
+  {
+    "categorie": "GÉOGRAPHIE & LOCALISATION",
+    "question": "Antsirabe est célèbre pour ses sources d'eau. Quel type de sources ?",
+    "bonne_reponse": "Thermales",
+    "mauvaises_reponses": [
+      "Glaciaires",
+      "Souterraines karstiques"
+    ],
+    "icone": "♨️",
+    "indice": "L'eau y est naturellement chaude.",
+    "empreinte": "197a908a05e10f8b0a5c0c92929d25a2d4a521c1"
+  },
+  {
+    "categorie": "GÉOGRAPHIE & LOCALISATION",
+    "question": "Dans quel axe routier national se trouve Antsirabe ?",
+    "bonne_reponse": "RN7",
+    "mauvaises_reponses": [
+      "RN2",
+      "RN4"
+    ],
+    "icone": "🛣️",
+    "indice": "C'est la route la plus touristique de Madagascar.",
+    "empreinte": "d9a5ce286a7117ee5ffaa89f213140577f355fba"
+  },
+  {
+    "categorie": "VIE SPIRITUELLE",
+    "question": "Quelle confession religieuse est associée à l'UAZ ?",
+    "bonne_reponse": "Adventiste du Septième Jour",
+    "mauvaises_reponses": [
+      "Catholique Romaine",
+      "Église Luthérienne"
+    ],
+    "icone": "⛪",
+    "indice": "C'est dans le nom de l'université !",
+    "empreinte": "347ff0c88618c11d31ed1fbce7d17da9e2eabd2a"
+  },
+  {
+    "categorie": "VIE SPIRITUELLE",
+    "question": "Quel jour de la semaine est observé comme sabbat à l'UAZ ?",
+    "bonne_reponse": "Le samedi",
+    "mauvaises_reponses": [
+      "Le dimanche",
+      "Le vendredi"
+    ],
+    "icone": "📅",
+    "indice": "Les Adventistes observent le septième jour de la semaine.",
+    "empreinte": "9d42ade1d4347692fe85d7fa43ec61a8952223e4"
+  },
+  {
+    "categorie": "VIE SPIRITUELLE",
+    "question": "Quelle activité commence traditionnellement chaque journée à l'UAZ ?",
+    "bonne_reponse": "Le culte du matin",
+    "mauvaises_reponses": [
+      "Le sport matinal",
+      "L'appel des étudiants"
+    ],
+    "icone": "🙏",
+    "indice": "C'est un moment de recueillement spirituel.",
+    "empreinte": "4d6c0133637fdf8d5ddc97494ffc8c44e4d39685"
+  },
+  {
+    "categorie": "VIE SPIRITUELLE",
+    "question": "Quel événement spirituel hebdomadaire rassemble tout le campus ?",
+    "bonne_reponse": "Le culte du sabbat",
+    "mauvaises_reponses": [
+      "La messe du dimanche",
+      "Le séminaire du mercredi"
+    ],
+    "icone": "🕊️",
+    "indice": "C'est le jour sacré des Adventistes.",
+    "empreinte": "5d57428f4323024fbea4c68510757c8ea84acf0a"
+  },
+  {
+    "categorie": "VIE SPIRITUELLE",
+    "question": "À quelle heure commence généralement le sabbat à l'UAZ ?",
+    "bonne_reponse": "Au coucher du soleil le vendredi",
+    "mauvaises_reponses": [
+      "À minuit le samedi",
+      "À 6h le samedi matin"
+    ],
+    "icone": "🌅",
+    "indice": "Les Adventistes suivent le calendrier biblique.",
+    "empreinte": "799d2af9f6dcedd14a0841c2b1029817c3388c43"
+  },
+  {
+    "categorie": "VIE SPIRITUELLE",
+    "question": "Quel livre sacré est à la base de l'enseignement spirituel à l'UAZ ?",
+    "bonne_reponse": "La Bible",
+    "mauvaises_reponses": [
+      "Le Coran",
+      "Le Talmud"
+    ],
+    "icone": "📖",
+    "indice": "C'est le texte fondamental du christianisme.",
+    "empreinte": "f1de301d9e88427f5cd7542a9bb3ca282547f24e"
+  },
+  {
+    "categorie": "VIE SPIRITUELLE",
+    "question": "Quel mode de vie alimentaire est encouragé par l'église adventiste ?",
+    "bonne_reponse": "Le végétarisme",
+    "mauvaises_reponses": [
+      "Le régime carnivore",
+      "Le jeûne permanent"
+    ],
+    "icone": "🥗",
+    "indice": "La santé et une alimentation saine sont des valeurs adventistes.",
+    "empreinte": "83491213df04fd32b0a1add8c64ad9daf94f3a59"
+  },
+  {
+    "categorie": "VIE SPIRITUELLE",
+    "question": "Comment appelle-t-on le moment de prière en groupe le soir à l'UAZ ?",
+    "bonne_reponse": "Le culte du soir",
+    "mauvaises_reponses": [
+      "Les vêpres",
+      "La méditation nocturne"
+    ],
+    "icone": "🌙",
+    "indice": "C'est le pendant du culte du matin.",
+    "empreinte": "47de0781589b93e2b877417eb571fb4297a88c8e"
+  },
+  {
+    "categorie": "ACADÉMIQUE & ÉTUDES",
+    "question": "Quelle est la vision de l'UAZ ?",
+    "bonne_reponse": "Préparer aujourd'hui les leaders de demain",
+    "mauvaises_reponses": [
+      "L'amour de Dieu et du prochain",
+      "Le service dans l'excellence"
+    ],
+    "icone": "🎓",
+    "indice": "Elle combine leadership et spiritualité.",
+    "empreinte": "b68cad0cdd11b5a8c69bd2f70aa448d3663d7745"
+  },
+  {
+    "categorie": "ACADÉMIQUE & ÉTUDES",
+    "question": "En quelle langue se déroulent principalement les cours à l'UAZ ?",
+    "bonne_reponse": "Français",
+    "mauvaises_reponses": [
+      "Malgache",
+      "Anglais"
+    ],
+    "icone": "🗣️",
+    "indice": "C'est la langue officielle de l'enseignement supérieur à Madagascar.",
+    "empreinte": "77ac714f64feb999ea0cf04521c0ad4365cd509b"
+  },
+  {
+    "categorie": "ACADÉMIQUE & ÉTUDES",
+    "question": "Quel département n'existe PAS à l'UAZ ?",
+    "bonne_reponse": "Médecine vétérinaire",
+    "mauvaises_reponses": [
+      "Théologie",
+      "Informatique"
+    ],
+    "icone": "🔬",
+    "indice": "Pensez aux animaux...",
+    "empreinte": "429d22ca94763001f91e610b429487c5efeaff29"
+  },
+  {
+    "categorie": "ACADÉMIQUE & ÉTUDES",
+    "question": "Quelle mention n'est PAS proposée à l'UAZ ?",
+    "bonne_reponse": "Architecture navale",
+    "mauvaises_reponses": [
+      "Sciences Infirmières",
+      "Gestion"
+    ],
+    "icone": "📚",
+    "indice": "Pensez au maritime...",
+    "empreinte": "3db84bb3ab71d3ced7e40cd8ada651f255e6efda"
+  },
+  {
+    "categorie": "ACADÉMIQUE & ÉTUDES",
+    "question": "Combien de semestres comporte une année académique à l'UAZ ?",
+    "bonne_reponse": "4 semestres",
+    "mauvaises_reponses": [
+      "3 trimestres",
+      "1 quadrimestre"
+    ],
+    "icone": "📆",
+    "indice": "Deux semestres principaux, chacun divisé en deux parties.",
+    "empreinte": "5ac9f564b2e79811e63536c83696428cfe840455"
+  },
+  {
+    "categorie": "ACADÉMIQUE & ÉTUDES",
+    "question": "Quel système de notation est utilisé à l'UAZ ?",
+    "bonne_reponse": "Sur 20",
+    "mauvaises_reponses": [
+      "Sur 100",
+      "Lettres (A, B, C)"
+    ],
+    "icone": "💯",
+    "indice": "C'est le système français classique.",
+    "empreinte": "b4fc95ac2b39234bdffd790cc40a6c7a8067423c"
+  },
+  {
+    "categorie": "ACADÉMIQUE & ÉTUDES",
+    "question": "Quel diplôme obtient-on après 3 ans d'études à l'UAZ ?",
+    "bonne_reponse": "Licence",
+    "mauvaises_reponses": [
+      "Master",
+      "Doctorat"
+    ],
+    "icone": "🎓",
+    "indice": "C'est le premier grade du système LMD.",
+    "empreinte": "49b1e0d8de2b160821c71d579ec948c5965bf5cf"
+  },
+  {
+    "categorie": "ACADÉMIQUE & ÉTUDES",
+    "question": "Que signifie le sigle LMD ?",
+    "bonne_reponse": "Licence-Master-Doctorat",
+    "mauvaises_reponses": [
+      "Lycée-Maîtrise-Diplôme",
+      "Latin-Maths-Droit"
+    ],
+    "icone": "📝",
+    "indice": "C'est le système universitaire standard.",
+    "empreinte": "7e05cbc6f4aba63e54fee4f43fb3b7937d281765"
+  },
+  {
+    "categorie": "ACADÉMIQUE & ÉTUDES",
+    "question": "La mention Théologie à l'UAZ forme principalement des…",
+    "bonne_reponse": "Pasteurs et théologiens",
+    "mauvaises_reponses": [
+      "Ingénieurs",
+      "Médecins"
+    ],
+    "icone": "✝️",
+    "indice": "C'est lié au ministère religieux.",
+    "empreinte": "761b53ddb3393f62dd5dcd54d4df8f28660d8768"
+  },
+  {
+    "categorie": "ACADÉMIQUE & ÉTUDES",
+    "question": "Quelle mention forme les futurs soignants à l'UAZ ?",
+    "bonne_reponse": "Sciences Infirmières",
+    "mauvaises_reponses": [
+      "Pharmacie",
+      "Chirurgie"
+    ],
+    "icone": "🏥",
+    "indice": "Ils travaillent dans les hôpitaux au chevet des patients.",
+    "empreinte": "56685ec474f6841d1fadc287832cdae4667bf88d"
+  },
+  {
+    "categorie": "ACADÉMIQUE & ÉTUDES",
+    "question": "Quel domaine d'études inclut l'informatique à l'UAZ ?",
+    "bonne_reponse": "Sciences et Technologies",
+    "mauvaises_reponses": [
+      "Arts et Lettres",
+      "Droit"
+    ],
+    "icone": "💻",
+    "indice": "C'est le domaine des sciences exactes et appliquées.",
+    "empreinte": "342554b9bc7bcacc69891dbedde6dfb76cfbefae"
+  },
+  {
+    "categorie": "ACADÉMIQUE & ÉTUDES",
+    "question": "Combien d'années d'études faut-il pour obtenir un Master à l'UAZ ?",
+    "bonne_reponse": "5 ans (3+2)",
+    "mauvaises_reponses": [
+      "4 ans",
+      "6 ans"
+    ],
+    "icone": "🎯",
+    "indice": "Licence en 3 ans, puis 2 ans de plus.",
+    "empreinte": "e249aa7fa37484fb297a8a814aebfec04c006971"
+  },
+  {
+    "categorie": "VIE CAMPUS",
+    "question": "Comment s'appelle le système de gestion académique de l'UAZ ?",
+    "bonne_reponse": "Infinit Registrar",
+    "mauvaises_reponses": [
+      "Campus Pro",
+      "SchoolNet"
+    ],
+    "icone": "💻",
+    "indice": "Vous l'utilisez en ce moment même !",
+    "empreinte": "e5bcb46e02c56222e61778bda7f1c31a490c8898"
+  },
+  {
+    "categorie": "VIE CAMPUS",
+    "question": "Quel type d'hébergement est proposé aux étudiants sur le campus ?",
+    "bonne_reponse": "Des dortoirs (internats)",
+    "mauvaises_reponses": [
+      "Des appartements individuels",
+      "Des villas partagées"
+    ],
+    "icone": "🏠",
+    "indice": "Les étudiants partagent des chambres.",
+    "empreinte": "a0bca227bdc63f876545bc2e97222210effdbb20"
+  },
+  {
+    "categorie": "VIE CAMPUS",
+    "question": "Comment appelle-t-on le lieu où l'on mange à l'UAZ ?",
+    "bonne_reponse": "La cafétéria",
+    "mauvaises_reponses": [
+      "Le restaurant gastronomique",
+      "La brasserie"
+    ],
+    "icone": "🍽️",
+    "indice": "C'est le terme classique pour une cantine universitaire.",
+    "empreinte": "5180fdef9184ebaece507008562cd18c1fa76a05"
+  },
+  {
+    "categorie": "VIE CAMPUS",
+    "question": "Les étudiants de l'UAZ portent-ils un uniforme ?",
+    "bonne_reponse": "Oui, en tenue correcte exigée",
+    "mauvaises_reponses": [
+      "Non, tenue libre",
+      "Seulement le vendredi"
+    ],
+    "icone": "👔",
+    "indice": "L'UAZ prépare déjà les leaders de demain, donc une tenue professionnelle est de rigueur.",
+    "empreinte": "e6d9a3aca05210cd4b5535df0e61356852b35261"
+  },
+  {
+    "categorie": "VIE CAMPUS",
+    "question": "Quel sport est couramment pratiqué sur le campus de l'UAZ ?",
+    "bonne_reponse": "Le football",
+    "mauvaises_reponses": [
+      "Le hockey sur glace",
+      "Le cricket"
+    ],
+    "icone": "⚽",
+    "indice": "C'est le sport le plus populaire à Madagascar.",
+    "empreinte": "56971c0629fbf2cb92c0cd68084214c83f955f7c"
+  },
+  {
+    "categorie": "VIE CAMPUS",
+    "question": "Quel événement annuel rassemble les étudiants pour des activités sportives et culturelles ?",
+    "bonne_reponse": "La journée culturelle",
+    "mauvaises_reponses": [
+      "Le marathon académique",
+      "Les olympiades nationales"
+    ],
+    "icone": "🎭",
+    "indice": "C'est un temps fort du campus mêlant sport et culture.",
+    "empreinte": "ccdcf10740618bda281eb08954dffcd63eee0373"
+  },
+  {
+    "categorie": "VIE CAMPUS",
+    "question": "Quel est le jour de repos hebdomadaire au campus de l'UAZ ?",
+    "bonne_reponse": "Le samedi (sabbat)",
+    "mauvaises_reponses": [
+      "Le dimanche",
+      "Le lundi"
+    ],
+    "icone": "😴",
+    "indice": "C'est le jour sacré des Adventistes.",
+    "empreinte": "dfa42a33eebcb95562804d040d24a0381e7d4126"
+  },
+  {
+    "categorie": "VIE CAMPUS",
+    "question": "Quel est l'endroit où les étudiants peuvent emprunter des livres à l'UAZ ?",
+    "bonne_reponse": "La bibliothèque Paul Pichot",
+    "mauvaises_reponses": [
+      "La médiathèque Paul Pichot",
+      "La librairie Paul Pichot"
+    ],
+    "icone": "📚",
+    "indice": "Elle se trouve sur le campus même.",
+    "empreinte": "cbcdb3e682bfb7f11815e5808f0b782165f3dd51"
+  },
+  {
+    "categorie": "CULTURE GÉNÉRALE MADAGASCAR",
+    "question": "Quelle est la capitale de Madagascar ?",
+    "bonne_reponse": "Antananarivo",
+    "mauvaises_reponses": [
+      "Antsirabe",
+      "Toamasina"
+    ],
+    "icone": "🏙️",
+    "indice": "On l'appelle aussi Tana.",
+    "empreinte": "85da3d86555791c50d4723d6729a034b6dda7656"
+  },
+  {
+    "categorie": "CULTURE GÉNÉRALE MADAGASCAR",
+    "question": "Quel océan borde Madagascar ?",
+    "bonne_reponse": "L'océan Indien",
+    "mauvaises_reponses": [
+      "L'océan Atlantique",
+      "L'océan Pacifique"
+    ],
+    "icone": "🌊",
+    "indice": "Madagascar est à l'est du continent africain.",
+    "empreinte": "56e8fd5281d773025a53ef6bd343dc24b717b5b4"
+  },
+  {
+    "categorie": "CULTURE GÉNÉRALE MADAGASCAR",
+    "question": "Quelle est la monnaie officielle de Madagascar ?",
+    "bonne_reponse": "L'Ariary",
+    "mauvaises_reponses": [
+      "Le Franc CFA",
+      "Le Dollar malgache"
+    ],
+    "icone": "💰",
+    "indice": "Elle a remplacé le Franc Malgache.",
+    "empreinte": "9ed83ffc0fd102702e33aa290fd78fb322645db9"
+  },
+  {
+    "categorie": "CULTURE GÉNÉRALE MADAGASCAR",
+    "question": "Quelles sont les deux langues officielles de Madagascar ?",
+    "bonne_reponse": "Malgache et Français",
+    "mauvaises_reponses": [
+      "Malgache et Anglais",
+      "Français et Swahili"
+    ],
+    "icone": "🗣️",
+    "indice": "L'une est la langue locale, l'autre un héritage colonial.",
+    "empreinte": "f47cde2ba392083a20875c3e13d6d18bbbfbca55"
+  },
+  {
+    "categorie": "CULTURE GÉNÉRALE MADAGASCAR",
+    "question": "Quel animal est emblématique de Madagascar ?",
+    "bonne_reponse": "Le lémurien",
+    "mauvaises_reponses": [
+      "Le lion",
+      "L'éléphant"
+    ],
+    "icone": "🐒",
+    "indice": "C'est un primate qu'on ne trouve nulle part ailleurs.",
+    "empreinte": "d4c7d9615db4b6a3387c5ac433effc835a0aa510"
+  },
+  {
+    "categorie": "CULTURE GÉNÉRALE MADAGASCAR",
+    "question": "Quel arbre emblématique pousse à Madagascar ?",
+    "bonne_reponse": "Le baobab",
+    "mauvaises_reponses": [
+      "Le séquoia",
+      "L'eucalyptus"
+    ],
+    "icone": "🌳",
+    "indice": "L'allée de ces arbres à Morondava est mondialement célèbre.",
+    "empreinte": "dfbae1e154e127b60c01aca7e67d182786e94b9d"
+  },
+  {
+    "categorie": "CULTURE GÉNÉRALE MADAGASCAR",
+    "question": "Madagascar est la combientième plus grande île du monde ?",
+    "bonne_reponse": "La 4ème",
+    "mauvaises_reponses": [
+      "La 2ème",
+      "La 7ème"
+    ],
+    "icone": "🏝️",
+    "indice": "Après le Groenland, la Nouvelle-Guinée et Bornéo.",
+    "empreinte": "7dba699c71b30a0bdfe1d301db9adf2b66a34518"
+  },
+  {
+    "categorie": "CULTURE GÉNÉRALE MADAGASCAR",
+    "question": "Quelle plante à épice Madagascar est-elle le premier producteur mondial ?",
+    "bonne_reponse": "La vanille",
+    "mauvaises_reponses": [
+      "Le poivre",
+      "La cannelle"
+    ],
+    "icone": "🌿",
+    "indice": "C'est une gousse noire très parfumée.",
+    "empreinte": "d33d4cef181c0a62c09f3f6934df79e4a623ed41"
+  },
+  {
+    "categorie": "CULTURE GÉNÉRALE MADAGASCAR",
+    "question": "Quel canal sépare Madagascar de l'Afrique ?",
+    "bonne_reponse": "Le canal du Mozambique",
+    "mauvaises_reponses": [
+      "Le canal de Suez",
+      "Le détroit de Gibraltar"
+    ],
+    "icone": "🌏",
+    "indice": "Il porte le nom d'un pays voisin d'Afrique de l'Est.",
+    "empreinte": "2646c51582c85b876277385b33c70a4393e9848c"
+  },
+  {
+    "categorie": "CULTURE GÉNÉRALE MADAGASCAR",
+    "question": "Quel est le plat traditionnel malgache consommé quotidiennement ?",
+    "bonne_reponse": "Le riz (vary)",
+    "mauvaises_reponses": [
+      "Le couscous",
+      "Les pâtes"
+    ],
+    "icone": "🍚",
+    "indice": "Les Malgaches en consomment 3 fois par jour.",
+    "empreinte": "498377bf5f2b85d9beb11ddc682192062d0d61b8"
+  }
+]

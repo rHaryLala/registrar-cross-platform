@@ -1,0 +1,169 @@
+## Période et volume
+2026-09-15 07:39:48.188 | 2026-11-14 19:09:38.099 | 36975 | 212
+
+## Types d'action
+consultation | 19997
+modification | 11066
+connexion | 2454
+export | 2034
+action | 647
+echec_connexion | 609
+deconnexion | 161
+evenement | 7
+
+## Par rôle (niveau) : requêtes, utilisateurs distincts
+3 | 12489 | 7
+1 | 9014 | 4
+8 | 6046 | 179
+6 | 4788 | 8
+4 | 1877 | 5
+9 | 729 | 1
+anonyme | 724 | 0
+2 | 560 | 3
+7 | 464 | 7
+5 | 284 | 2
+
+## Appareil (top 12)
+Chrome · Windows | 21630
+Edge · Windows | 6029
+Chrome · Android | 5298
+Chrome · macOS | 1657
+Safari · macOS | 1222
+Firefox · Windows | 693
+Chrome · Linux | 133
+Safari · iPhone | 127
+Chrome · iPhone | 83
+Opera · Windows | 59
+Robot | 24
+iPhone | 7
+
+## Mobile vs ordinateur (selon user_agent)
+mobile/tablette | 5526 | 143
+ordinateur | 31449 | 110
+
+## Mobile par rôle (utilisateurs distincts)
+3 | 1 | 12489
+1 | 474 | 9014
+8 | 4386 | 6046
+6 | 90 | 4788
+4 | 42 | 1877
+9 | 107 | 729
+anon | 392 | 724
+2 | 5 | 560
+7 | 15 | 464
+5 | 14 | 284
+
+## Système (iOS / Android / Windows / Mac)
+Windows | 28413 | 95
+Android | 5309 | 137
+macOS | 2879 | 15
+iOS | 217 | 8
+Linux | 133 | 11
+autre | 24 | 0
+
+## Navigateur
+Chrome | 28801
+Edge | 6034
+Safari | 1349
+Firefox | 699
+Opera | 59
+autre | 33
+
+## Pages les plus utilisées (top 45 chemins, utilisateurs distincts)
+/student | 5359 | 24
+/tableau-de-bord | 1986 | 25
+/student/home | 1686 | 191
+/inscription/inscription | 1330 | 22
+/src/data.topdf | 1179 | 12
+/etudiants | 1017 | 23
+/student/dashboard | 970 | 136
+/login | 903 | 160
+/cours | 894 | 9
+/dashboard | 824 | 114
+/finance/authorized-reinscription | 696 | 10
+/src/data.topdf.php | 646 | 4
+/student/notes | 517 | 127
+/courses | 398 | 10
+/settings | 340 | 9
+/candidatures | 239 | 7
+/students/create | 234 | 8
+/work-education | 220 | 6
+/student/info | 181 | 98
+/messagerie | 177 | 78
+/logout | 161 | 75
+/session-rankings | 144 | 10
+/settings/logs | 141 | 1
+/teacher/dashboard | 120 | 13
+/student/inscriptions | 112 | 40
+/courses-sessions | 101 | 6
+/inscriptions/tardives | 98 | 7
+/student/presence | 93 | 53
+/student/news | 89 | 51
+/teacher/remise-notes | 79 | 12
+/professors | 68 | 8
+/queue | 66 | 2
+/student/quiz | 64 | 50
+/deans-list | 63 | 13
+/schedule | 58 | 15
+/professor | 58 | 7
+/student/fiche-inscription | 53 | 25
+/retouche-photo | 52 | 3
+/top-students | 50 | 12
+/finance | 50 | 2
+/reglement | 47 | 13
+/accounts/create | 45 | 1
+/espace | 45 | 15
+/src/gen.pdf | 42 | 5
+/student/game | 40 | 30
+
+## Nombre de chemins distincts (GET page) et de chemins POST
+22105 | 74 | 71
+
+## Tables les plus modifiées (top 20)
+t_2023_notes | 5387
+t_2024_cours_finance | 4014
+t_2024_inscription_session | 3170
+t_student_modification_history | 3076
+t_presence_ligne | 2809
+t_2024_etudiant_finace | 2750
+login_locations | 2454
+tbl_2024_etudiant | 2259
+t_notes_modification_history | 1180
+t_2024_etudiant_frais_perso | 818
+t_remise_notes_ligne | 775
+t_queue_global_music | 673
+t_2024_bacc | 514
+t_queue_tickets | 499
+t_work_education | 479
+t_2023_promotion_notes | 470
+t_inscription_trace | 439
+t_2023_cours | 351
+t_queue_sessions | 259
+candidat | 246
+
+## Heures de pointe (Madagascar, requêtes par heure)
+0 | 49
+1 | 14
+2 | 5
+3 | 58
+4 | 37
+5 | 133
+6 | 217
+7 | 387
+8 | 2905
+9 | 5066
+10 | 5167
+11 | 4363
+12 | 1445
+13 | 1855
+14 | 3614
+15 | 3770
+16 | 2996
+17 | 1941
+18 | 888
+19 | 718
+20 | 702
+21 | 365
+22 | 222
+23 | 58
+

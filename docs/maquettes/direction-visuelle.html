@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maquette — direction visuelle Registrar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..900&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+/* =====================================================================
+   JETONS — palette du gabarit d'affiche « Semaine de prière »
+   (uaz-website / public/js/admin/studio/moteur.js : COULEURS)
+   ===================================================================== */
+:root {
+  /* primitifs (identiques dans les deux thèmes) */
+  --marine-1: #1a2b6a;
+  --marine-2: #13235b;
+  --marine-3: #0e1c4d;
+  --cyan: #00c4d4;
+  --blanc: #ffffff;
+  --doux: #c9d1f2;
+  --pale: #9aa6dc;
+
+  /* l'« affiche » (hero) reste marine dans les deux thèmes : c'est la signature */
+  --hero-bg: linear-gradient(155deg, var(--marine-1) 0%, var(--marine-2) 55%, var(--marine-3) 100%);
+  --hero-text: #fff;
+  --hero-text-2: var(--doux);
+  --hero-line: rgba(255,255,255,.13);
+
+  --font: 'Inter', ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+  --r: 14px;
+}
+/* SOMBRE : thème d'identité (comme l'affiche et le back-office actuel) */
+[data-theme="dark"] {
+  --page: #080f2e;
+  --bg: var(--marine-3);
+  --rail: #0a1540;
+  --card: rgba(255,255,255,.055);
+  --card-hover: rgba(255,255,255,.095);
+  --line: rgba(255,255,255,.13);
+  --text: #fff;
+  --text-2: var(--doux);
+  --text-3: var(--pale);
+  --accent: var(--cyan);
+  --accent-text: var(--cyan);
+  --on-accent: var(--marine-3);
+  --ok: #34d399; --warn: #fbbf24; --bad: #f87171;
+  color-scheme: dark;
+}
+/* CLAIR : cyan assombri pour le texte (4,88:1) — #00c4d4 ne fait que 2,13:1 sur blanc */
+[data-theme="light"] {
+  --page: #dfe4f2;
+  --bg: #f3f5fb;
+  --rail: var(--marine-1);
+  --card: #fff;
+  --card-hover: #eef1fa;
+  --line: #dfe3ef;
+  --text: #1d2233;
+  --text-2: #5b6483;
+  --text-3: #5b6483;
+  --accent: var(--cyan);
+  --accent-text: #007d8a;
+  --on-accent: var(--marine-3);
+  --ok: #047857; --warn: #b45309; --bad: #b91c1c;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--page); color: var(--text); font: 400 15px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
+:where(a, button, input):focus-visible { outline: 3px solid var(--accent-text); outline-offset: 2px; }
+.d-hero :focus-visible, .p-hero :focus-visible, .rail :focus-visible { outline-color: var(--cyan); }
+button { font: inherit; color: inherit; cursor: pointer; }
+svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* ---------- page de présentation ---------- */
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; padding: 20px 16px; max-width: 1480px; margin: 0 auto; }
+.top h1 { margin: 0; font-size: 15px; font-weight: 800; letter-spacing: -.01em; flex: 1 1 280px; }
+.top h1 small { display: block; font-weight: 500; color: var(--text-3); font-size: 13px; }
+.ctrl { display: flex; gap: 8px; flex-wrap: wrap; }
+.ctrl button { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 8px 14px; font-weight: 600; font-size: 13px; min-height: 40px; }
+.ctrl button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.stage { display: grid; gap: 28px; padding: 0 16px 48px; max-width: 1480px; margin: 0 auto; grid-template-columns: minmax(0, 1fr); align-items: start; }
+.stage > section { min-width: 0; }
+@media (min-width: 1240px) { .stage { grid-template-columns: 430px minmax(0, 1fr); } }
+.legend { font-size: 12px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--text-3); margin: 0 0 10px; }
+.scroller { overflow-x: auto; border-radius: 18px; }
+.note { max-width: 1480px; margin: 0 auto; padding: 0 16px 56px; color: var(--text-3); font-size: 13px; }
+
+/* ---------- grammaire de l'affiche ---------- */
+.eyebrow { display: flex; align-items: center; gap: 14px; margin: 0; font-size: 12px; font-weight: 800; letter-spacing: .24em; text-transform: uppercase; color: var(--cyan); }
+.eyebrow i { display: block; width: 36px; height: 3px; background: var(--cyan); border-radius: 2px; }
+.titre { margin: 0; font-weight: 900; letter-spacing: -.035em; line-height: .98; color: var(--hero-text); }
+.titre .mot { display: inline-block; overflow: hidden; padding: .14em 0 .07em; margin: -.14em 0 -.07em; vertical-align: top; }
+.titre .mot > span { display: inline-block; }
+.titre .c { color: var(--cyan); }
+.sous { margin: 0; color: var(--hero-text-2); }
+.filet { height: 1px; background: var(--hero-line); transform-origin: left center; }
+.marque { display: flex; align-items: center; gap: 14px; }
+.marque img { width: 44px; height: 44px; border-radius: 50%; flex: none; background: #fff; }
+.marque b { display: block; font-size: 12px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: #fff; line-height: 1.2; }
+.marque em { display: block; font-style: normal; font-weight: 800; font-size: 19px; color: var(--cyan); letter-spacing: -.01em; line-height: 1.2; }
+
+.label { font-size: 12px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: var(--accent-text); margin: 0 0 6px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 16px 18px; min-width: 0; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; border: 1px solid currentColor; border-radius: 999px; padding: 2px 10px 2px 8px; white-space: nowrap; }
+.chip::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.chip.ok { color: var(--ok); } .chip.warn { color: var(--warn); } .chip.bad { color: var(--bad); } .chip.info { color: var(--accent-text); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 10px; border: 1px solid transparent; font-weight: 800; font-size: 14px; text-decoration: none; }
+.btn.p { background: var(--cyan); color: var(--marine-3); }
+.btn.s { background: transparent; color: #fff; border-color: rgba(255,255,255,.3); }
+
+/* ---------- TÉLÉPHONE (étudiant) ---------- */
+.phone { width: 390px; max-width: 100%; margin: 0 auto; background: #05091f; border-radius: 42px; padding: 10px; box-shadow: 0 30px 60px -20px rgba(0,0,0,.6); }
+.screen { height: 790px; border-radius: 32px; overflow: hidden; background: var(--bg); display: flex; flex-direction: column; position: relative; }
+.scroll { flex: 1; overflow-y: auto; scrollbar-width: none; }
+.scroll::-webkit-scrollbar { display: none; }
+.p-hero { background: var(--hero-bg); padding: 22px 20px 26px; }
+.p-hero .marque { margin-bottom: 18px; }
+.p-hero .filet { margin: 0 0 30px; }
+.p-hero .titre { font-size: 46px; margin: 16px 0 14px; }
+.p-hero .sous { font-size: 15px; }
+.p-body { padding: 14px 14px 20px; display: grid; gap: 12px; }
+.duo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.big { font-size: 34px; font-weight: 900; letter-spacing: -.03em; line-height: 1; margin: 2px 0 6px; }
+.big small { font-size: 14px; font-weight: 600; color: var(--text-3); letter-spacing: 0; }
+.muted { color: var(--text-2); font-size: 14px; }
+.cours h3 { margin: 0 0 4px; font-size: 20px; font-weight: 800; letter-spacing: -.02em; }
+.cours .l { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.notes { list-style: none; margin: 0; padding: 0; }
+.notes li { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+.notes li:first-child { border-top: 0; padding-top: 4px; }
+.notes .n { flex: 1; min-width: 0; }
+.notes .n b { display: block; font-weight: 700; }
+.notes .n span { font-size: 13px; color: var(--text-3); }
+.notes .g { font-size: 22px; font-weight: 900; letter-spacing: -.02em; }
+.prog { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; margin: 10px 0 8px; }
+.prog > i { display: block; height: 100%; background: var(--cyan); border-radius: 4px; }
+.cta-card { border-color: var(--cyan); display: grid; gap: 12px; }
+.cta-card p { margin: 0; font-weight: 700; font-size: 16px; }
+.tabbar { display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--line); background: var(--bg); padding: 6px 4px calc(14px + env(safe-area-inset-bottom, 0px)); }
+.tab { display: grid; justify-items: center; gap: 3px; padding: 6px 0; font-size: 12px; font-weight: 700; color: var(--text-3); text-decoration: none; position: relative; min-height: 48px; }
+.tab[aria-current] { color: var(--accent-text); }
+.tab[aria-current]::after { content: ''; position: absolute; top: -7px; width: 28px; height: 3px; border-radius: 2px; background: var(--cyan); }
+.sync { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-3); padding: 0 4px; }
+
+/* ---------- BUREAU (registrariat) ---------- */
+.desk { display: grid; grid-template-columns: 216px minmax(0, 1fr); min-width: 940px; height: 740px; background: var(--bg); border-radius: 18px; overflow: hidden; border: 1px solid var(--line); }
+.rail { background: var(--rail); padding: 20px 14px; display: flex; flex-direction: column; gap: 4px; color: var(--pale); }
+.rail .marque { padding: 0 6px 18px; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,.13); }
+.rail .marque b { font-size: 10px; } .rail .marque em { font-size: 17px; }
+.rail a { display: flex; align-items: center; gap: 12px; padding: 0 12px; min-height: 42px; border-radius: 10px; color: var(--pale); text-decoration: none; font-weight: 600; font-size: 14px; }
+.rail a:hover { background: rgba(255,255,255,.07); color: #fff; }
+.rail a[aria-current] { background: rgba(0,196,212,.14); color: #fff; box-shadow: inset 3px 0 0 var(--cyan); }
+.rail a .b { margin-left: auto; background: var(--cyan); color: var(--marine-3); font-size: 12px; font-weight: 800; border-radius: 999px; padding: 0 8px; }
+.rail .moi { margin-top: auto; padding: 12px 8px 0; border-top: 1px solid rgba(255,255,255,.13); font-size: 13px; color: var(--pale); }
+.rail .moi b { color: #fff; display: block; font-size: 14px; }
+.main { overflow-y: auto; scrollbar-width: thin; }
+.bar { display: flex; align-items: center; gap: 16px; padding: 14px 28px; border-bottom: 1px solid var(--line); background: var(--bg); position: sticky; top: 0; z-index: 2; }
+.search { flex: 1; max-width: 460px; display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 0 14px; min-height: 42px; color: var(--text-3); font-size: 14px; }
+.search kbd { margin-left: auto; font: 600 12px var(--mono); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
+.etat { margin-left: auto; font-size: 13px; color: var(--text-2); display: flex; align-items: center; gap: 8px; }
+.etat::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+.d-hero { background: var(--hero-bg); padding: 30px 28px 30px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
+.d-hero .titre { font-size: 56px; margin: 18px 0 16px; }
+.d-hero .sous { font-size: 16px; max-width: 34em; margin-bottom: 24px; }
+.d-hero .cta { display: flex; gap: 10px; flex-wrap: wrap; }
+.frise { list-style: none; margin: 30px 0 0; padding: 22px 0 0; border-top: 1px solid var(--hero-line); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.frise li { position: relative; color: var(--hero-text-2); font-size: 14px; }
+.frise li::before { content: ''; position: absolute; left: 0; top: -29px; width: 9px; height: 9px; border-radius: 50%; background: var(--marine-2); border: 2px solid var(--pale); }
+.frise li.now::before { background: var(--cyan); border-color: var(--cyan); box-shadow: 0 0 0 4px rgba(0,196,212,.22); }
+.frise b { display: block; color: #fff; font-weight: 700; }
+.frise .l { font-size: 12px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: var(--pale); margin-bottom: 14px; }
+.d-grid { padding: 22px 28px 32px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+td.num { white-space: nowrap; }
+.card h2 { margin: 0 0 12px; font-size: 17px; font-weight: 800; letter-spacing: -.01em; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--text-3); padding: 0 10px 8px; border-bottom: 1px solid var(--line); }
+td { padding: 12px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+tbody tr { transition: background .15s; }
+tbody tr:hover { background: var(--card-hover); }
+tbody tr:last-child td { border-bottom: 0; }
+td b { font-weight: 700; display: block; }
+td span.s { color: var(--text-3); font-size: 13px; }
+.bars { display: grid; gap: 14px; }
+.bars div { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 14px; }
+.bars .t { grid-column: 1 / -1; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.bars .t i { display: block; height: 100%; background: var(--cyan); border-radius: 4px; }
+.bars b { font-weight: 800; }
+
+/* ---------- fiche de jetons ---------- */
+.spec { max-width: 1480px; margin: 0 auto; padding: 0 16px 24px; display: grid; gap: 28px; }
+.sw { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.sw div { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; font-size: 13px; background: var(--card); }
+.sw i { display: block; height: 56px; border-bottom: 1px solid var(--line); }
+.sw p { margin: 0; padding: 8px 10px; } .sw b { display: block; } .sw code { font: 500 12px var(--mono); color: var(--text-3); }
+.typo { display: grid; gap: 14px; }
+.typo .titre { font-size: clamp(40px, 8vw, 96px); color: var(--text); }
+.typo .titre .c { color: var(--accent-text); }
+
+/* ---------- règles issues de la revue UX (ui-ux-pro-max) ---------- */
+[data-theme="dark"] { --primary: var(--cyan); --on-primary: var(--marine-3); }
+[data-theme="light"] { --primary: var(--marine-1); --on-primary: #fff; }
+.btn.pri { background: var(--primary); color: var(--on-primary); }
+.btn.ghost { background: transparent; color: var(--text); border-color: var(--line); }
+a, button, label, summary { cursor: pointer; touch-action: manipulation; }
+button:disabled, input:disabled { cursor: not-allowed; opacity: .5; }
+.btn, .tab { transition: transform .12s ease-out, background-color .15s; }
+.btn:active, .tab:active { transform: scale(.97); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.skip { position: absolute; left: -999px; top: 8px; z-index: 200; background: var(--cyan); color: var(--marine-3); padding: 10px 16px; border-radius: 8px; font-weight: 800; }
+.skip:focus { left: 8px; }
+th.ck, td.ck { width: 52px; padding: 0 0 0 4px; }
+td.ck label { display: grid; place-items: center; width: 44px; height: 44px; }
+td.ck input { width: 20px; height: 20px; accent-color: var(--accent-text); }
+.th { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; cursor: pointer; }
+.th::after { content: '\2195'; opacity: .55; font-size: 13px; }
+th[aria-sort="ascending"] .th::after { content: '\2191'; opacity: 1; color: var(--accent-text); }
+th[aria-sort="descending"] .th::after { content: '\2193'; opacity: 1; color: var(--accent-text); }
+.th:focus-visible { outline: 3px solid var(--accent-text); outline-offset: 2px; }
+.bulk { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; border: 1px solid var(--accent-text); background: color-mix(in srgb, var(--cyan) 12%, transparent); border-radius: 10px; padding: 8px 12px; margin-bottom: 12px; }
+.bulk[hidden] { display: none; }
+.bulk > span { font-weight: 600; margin-right: auto; }
+tr.fait td { opacity: .6; transition: opacity .3s; }
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 100; display: flex; align-items: center; gap: 12px; background: var(--marine-1); color: #fff; border: 1px solid rgba(255,255,255,.2); border-radius: 12px; padding: 8px 10px 8px 16px; box-shadow: 0 16px 40px -12px rgba(0,0,0,.6); max-width: calc(100vw - 32px); }
+.toast[hidden] { display: none; }
+.toast .btn.ghost { color: #fff; border-color: rgba(255,255,255,.35); min-height: 40px; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#l-reg">Aller au tableau de bord</a>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="home" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></symbol>
+  <symbol id="notes" viewBox="0 0 24 24"><path d="M4 4.5A2.5 2.5 0 016.5 2H20v17H6.5A2.5 2.5 0 004 21.5z"/><path d="M4 21.5V4.5M9 7h6"/></symbol>
+  <symbol id="presence" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9.5h18M8 3v3M16 3v3M9 15l2 2 4-4"/></symbol>
+  <symbol id="msg" viewBox="0 0 24 24"><path d="M21 12a8 8 0 01-11.6 7.1L3 21l1.9-5.4A8 8 0 1121 12z"/></symbol>
+  <symbol id="plus" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+  <symbol id="users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5M16 4.5a3.5 3.5 0 010 7M18 14.8c1.9.7 3.2 2.4 3.5 5.2"/></symbol>
+  <symbol id="check" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12l3 3 5-6"/></symbol>
+  <symbol id="wallet" viewBox="0 0 24 24"><path d="M3 7h16a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M3 7l12-4v4"/><circle cx="17" cy="13.5" r="1"/></symbol>
+  <symbol id="inbox" viewBox="0 0 24 24"><path d="M3 13l3-8h12l3 8"/><path d="M3 13v6h18v-6h-5l-1.5 2h-5L8 13z"/></symbol>
+  <symbol id="cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></symbol>
+  <symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
+  <symbol id="arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+</svg>
+
+<header class="top">
+  <h1>Maquette 03 — direction visuelle « Affiche »<small>Palette du gabarit « Semaine de prière » (uaz-website, Studio). Données fictives.</small></h1>
+  <div class="ctrl" role="group" aria-label="Réglages de la maquette">
+    <button type="button" data-theme-btn="dark" aria-pressed="true">Thème sombre</button>
+    <button type="button" data-theme-btn="light" aria-pressed="false">Thème clair</button>
+    <button type="button" id="rejouer">Rejouer l’animation</button>
+  </div>
+</header>
+
+<main class="stage">
+
+  <!-- =============== ÉTUDIANT · téléphone =============== -->
+  <section aria-labelledby="l-etu">
+    <p class="legend" id="l-etu">Étudiant · Android (73 % des usages étudiants)</p>
+    <div class="phone frame">
+      <div class="screen">
+        <div class="scroll">
+          <div class="p-hero">
+            <div class="marque"><img src="assets/sceau-uaz.png" alt="Sceau de l’Université Adventiste Zurcher"><div><b>Université Adventiste</b><em>Zurcher</em></div></div>
+            <div class="filet"></div>
+            <p class="eyebrow"><i></i>Bonjour Fanja</p>
+            <h1 class="titre"><span class="mot"><span>2 nouvelles</span></span><br><span class="mot c"><span>notes</span></span></h1>
+            <p class="sous">Algorithmique II et Anglais viennent d’être publiées.</p>
+          </div>
+
+          <div class="p-body">
+            <article class="card cours">
+              <div class="l"><div><p class="label">Prochain cours</p><h3>Algorithmique II</h3></div><span class="chip info">Dans 2 h</span></div>
+              <p class="muted">08 h 00 · Salle B12 · Dr Rabe</p>
+            </article>
+
+            <div class="duo">
+              <article class="card"><p class="label">Moyenne S1</p><p class="big num">13,42<small> /20</small></p><span class="chip ok">Au-dessus de 10</span></article>
+              <article class="card"><p class="label">Solde à payer</p><p class="big num" style="font-size:26px">180 000<small> Ar</small></p><span class="chip warn">Avant le 30 nov.</span></article>
+            </div>
+
+            <article class="card">
+              <p class="label">Dernières notes</p>
+              <ul class="notes">
+                <li><div class="n"><b>Algorithmique II</b><span>Publiée aujourd’hui</span></div><span class="g num">14,5</span></li>
+                <li><div class="n"><b>Anglais</b><span>Publiée aujourd’hui</span></div><span class="g num">15,0</span></li>
+                <li><div class="n"><b>Base de données</b><span>Publiée le 10 nov.</span></div><span class="g num">12,0</span></li>
+                <li><div class="n"><b>Mathématiques</b><span>Publiée le 8 nov.</span></div><span class="g num">11,5</span></li>
+              </ul>
+            </article>
+
+            <article class="card">
+              <p class="label">Assiduité</p>
+              <p class="big num">5 %<small> d’absences</small></p>
+              <div class="prog" role="img" aria-label="5 % d’absences sur une limite de 15 %"><i style="width:33%"></i></div>
+              <p class="muted" style="margin:0">Limite avant sanction : 15 %. Il vous reste 10 points.</p>
+            </article>
+
+            <article class="card cta-card">
+              <p>La réinscription est ouverte jusqu’au 30 novembre.</p>
+              <a class="btn p" href="#">Commencer ma réinscription <svg class="i"><use href="#arrow"/></svg></a>
+            </article>
+            <div class="sync"><span>Synchronisé il y a 2 min</span><span>Hors ligne : notes disponibles</span></div>
+          </div>
+        </div>
+        <nav class="tabbar" aria-label="Navigation principale">
+          <a class="tab" href="#" aria-current="page"><svg class="i"><use href="#home"/></svg>Accueil</a>
+          <a class="tab" href="#"><svg class="i"><use href="#notes"/></svg>Notes</a>
+          <a class="tab" href="#"><svg class="i"><use href="#presence"/></svg>Présence</a>
+          <a class="tab" href="#"><svg class="i"><use href="#msg"/></svg>Messages</a>
+          <a class="tab" href="#"><svg class="i"><use href="#plus"/></svg>Plus</a>
+        </nav>
+      </div>
+    </div>
+  </section>
+
+  <!-- =============== PERSONNEL · bureau =============== -->
+  <section aria-labelledby="l-reg" style="min-width:0">
+    <p class="legend" id="l-reg">Registrariat · Windows et macOS (chrome ou Edge, PWA installée)</p>
+    <div class="scroller">
+      <div class="desk frame">
+        <aside class="rail" aria-label="Navigation">
+          <div class="marque"><img src="assets/sceau-uaz.png" alt=""><div><b>Université Adventiste</b><em>Zurcher</em></div></div>
+          <a href="#" aria-current="page"><svg class="i"><use href="#home"/></svg>Tableau de bord</a>
+          <a href="#"><svg class="i"><use href="#users"/></svg>Étudiants</a>
+          <a href="#"><svg class="i"><use href="#check"/></svg>Notes <span class="b">12</span></a>
+          <a href="#"><svg class="i"><use href="#inbox"/></svg>Admissions <span class="b">23</span></a>
+          <a href="#"><svg class="i"><use href="#wallet"/></svg>Finance</a>
+          <a href="#"><svg class="i"><use href="#presence"/></svg>Assiduité</a>
+          <a href="#"><svg class="i"><use href="#msg"/></svg>Messagerie</a>
+          <a href="#"><svg class="i"><use href="#cog"/></svg>Paramètres</a>
+          <div class="moi"><b>Registrariat</b>Session 1 · 2026–27</div>
+        </aside>
+
+        <div class="main">
+          <div class="bar">
+            <div class="search"><svg class="i"><use href="#search"/></svg>Chercher un étudiant, un matricule, un cours<kbd>Ctrl K</kbd></div>
+            <span class="etat">En ligne · synchronisé</span>
+          </div>
+
+          <section class="d-hero">
+            <div>
+              <p class="eyebrow"><i></i>Registrariat · Tableau de bord</p>
+              <h1 class="titre"><span class="mot"><span>12 remises de notes</span></span><br><span class="mot"><span>à</span></span> <span class="mot c"><span>valider</span></span></h1>
+              <p class="sous">La plus ancienne date de trois jours. Une note n’entre dans l’historique et le bulletin qu’après votre validation.</p>
+              <div class="cta"><a class="btn p" href="#">Ouvrir la file de validation <svg class="i"><use href="#arrow"/></svg></a><a class="btn s" href="#">Voir les candidatures</a></div>
+            </div>
+            <div>
+              <ol class="frise" aria-label="Calendrier de la session">
+                <li class="now"><b>Aujourd’hui · 14 nov.</b>Remises de notes en cours</li>
+                <li><b>30 nov.</b>Fin de la réinscription</li>
+                <li><b>24 nov. → 5 déc.</b>Examens</li>
+                <li><b>12 déc.</b>Délibérations</li>
+              </ol>
+            </div>
+          </section>
+
+          <div class="d-grid">
+            <article class="card">
+              <h2>À traiter</h2>
+              <div class="bulk" id="bulk" hidden>
+                <span aria-live="polite"><b id="bulk-n">0</b> <span id="bulk-t">remise sélectionnée</span></span>
+                <button class="btn pri" id="bulk-ok" type="button">Valider la sélection</button>
+                <button class="btn ghost" id="bulk-clear" type="button">Tout désélectionner</button>
+              </div>
+              <table id="file">
+                <thead><tr>
+                  <th class="ck"><span class="sr">Sélection</span></th>
+                  <th aria-sort="none"><button class="th" type="button" data-cle="demande">Demande</button></th>
+                  <th>Source</th>
+                  <th aria-sort="none"><button class="th" type="button" data-cle="recue">Reçue</button></th>
+                  <th>État</th>
+                </tr></thead>
+                <tbody>
+                  <tr data-demande="Remise de notes · Algorithmique II" data-recue="120"><td class="ck"><label><input class="sel" type="checkbox" aria-label="Sélectionner : Remise de notes, Algorithmique II"></label></td><td><b>Remise de notes · Algorithmique II</b><span class="s">42 étudiants</span></td><td>Dr Rabe</td><td class="num">il y a 2 h</td><td><span class="chip warn">À valider</span></td></tr>
+                  <tr data-demande="Remise de notes · Base de données" data-recue="300"><td class="ck"><label><input class="sel" type="checkbox" aria-label="Sélectionner : Remise de notes, Base de données"></label></td><td><b>Remise de notes · Base de données</b><span class="s">36 étudiants</span></td><td>Mme Hanta</td><td class="num">il y a 5 h</td><td><span class="chip warn">À valider</span></td></tr>
+                  <tr data-demande="Candidature · Licence 1 Gestion" data-recue="1440"><td class="ck"></td><td><b>Candidature · Licence 1 Gestion</b><span class="s">Dossier complet</span></td><td>Admissions en ligne</td><td class="num">hier</td><td><span class="chip info">En cours</span></td></tr>
+                  <tr data-demande="Réinscription · autorisation" data-recue="3000"><td class="ck"></td><td><b>Réinscription · autorisation</b><span class="s">Solde réglé</span></td><td>Caisse</td><td class="num">12 nov.</td><td><span class="chip warn">À autoriser</span></td></tr>
+                  <tr data-demande="Inscription tardive" data-recue="4400"><td class="ck"></td><td><b>Inscription tardive</b><span class="s">Cas particulier</span></td><td>Registrariat</td><td class="num">11 nov.</td><td><span class="chip bad">En retard</span></td></tr>
+                  <tr data-demande="Remise de notes · Anglais" data-recue="4500"><td class="ck"></td><td><b>Remise de notes · Anglais</b><span class="s">38 étudiants</span></td><td>M. Andry</td><td class="num">11 nov.</td><td><span class="chip ok">Validée</span></td></tr>
+                </tbody>
+              </table>
+            </article>
+
+            <article class="card">
+              <h2>Inscrits par mention</h2>
+              <div class="bars" role="group" aria-label="Inscrits par mention : Informatique 312, Gestion 284, Théologie 190, Éducation 156, Agronomie 118">
+                <div><span>Informatique</span><b class="num">312</b><span class="t"><i style="width:100%"></i></span></div>
+                <div><span>Gestion</span><b class="num">284</b><span class="t"><i style="width:91%"></i></span></div>
+                <div><span>Théologie</span><b class="num">190</b><span class="t"><i style="width:61%"></i></span></div>
+                <div><span>Éducation</span><b class="num">156</b><span class="t"><i style="width:50%"></i></span></div>
+                <div><span>Agronomie</span><b class="num">118</b><span class="t"><i style="width:38%"></i></span></div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- =============== fiche de jetons =============== -->
+<section class="spec" aria-labelledby="l-jetons">
+  <p class="legend" id="l-jetons">Jetons (palette de l’affiche) et typographie</p>
+  <div class="sw">
+    <div><i style="background:#0e1c4d"></i><p><b>marine-3</b><code>#0e1c4d</code></p></div>
+    <div><i style="background:#13235b"></i><p><b>marine-2</b><code>#13235b</code></p></div>
+    <div><i style="background:#1a2b6a"></i><p><b>marine-1</b><code>#1a2b6a</code></p></div>
+    <div><i style="background:#00c4d4"></i><p><b>cyan</b><code>#00c4d4 · fonds, traits</code></p></div>
+    <div><i style="background:#007d8a"></i><p><b>cyan-texte (clair)</b><code>#007d8a · 4,88:1</code></p></div>
+    <div><i style="background:#c9d1f2"></i><p><b>doux</b><code>#c9d1f2</code></p></div>
+    <div><i style="background:#9aa6dc"></i><p><b>pâle</b><code>#9aa6dc</code></p></div>
+    <div><i style="background:#ffffff"></i><p><b>blanc</b><code>#ffffff</code></p></div>
+  </div>
+  <div class="typo">
+    <p class="eyebrow"><i></i>Inter · variable · 400 à 900</p>
+    <h2 class="titre" style="margin:0"><span class="mot"><span>Semaine de</span></span> <span class="mot c"><span>prière</span></span></h2>
+    <p style="margin:0;max-width:60ch;color:var(--text-2)">Titres en 900, interlignage serré (0,98), espacement −0,035 em, un seul mot-clé en cyan. Étiquettes en capitales, 800, espacées de 0,16 à 0,24 em. Corps en 400–500, 15 px au minimum sur téléphone. Chiffres tabulaires pour notes, montants et dates.</p>
+  </div>
+</section>
+<p class="note">Fictif : nom, notes, effectifs, montants et échéances. En production, Inter est auto-hébergée (aucun appel à Google) et le sceau est servi par l’application.</p>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toast-t"></span><button class="btn ghost" id="toast-undo" type="button">Annuler</button></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+(function () {
+  var root = document.documentElement;
+  /* #statique dans l'adresse : pas d'animation (captures d'écran, comparaisons). */
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches || location.hash.indexOf('statique') > -1;
+
+  function setTheme(t) {
+    root.dataset.theme = t;
+    document.querySelectorAll('[data-theme-btn]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.themeBtn === t));
+    });
+  }
+  document.querySelectorAll('[data-theme-btn]').forEach(function (b) {
+    b.addEventListener('click', function () { setTheme(b.dataset.themeBtn); });
+  });
+  if (location.hash.indexOf('clair') > -1 || window.matchMedia('(prefers-color-scheme: light)').matches) setTheme('light');
+
+  /* L'écran se compose comme l'affiche : le trait, le titre, le sous-titre, les filets, puis le contenu.
+     Seulement transform et opacity ; rien si l'utilisateur a demandé moins de mouvement.
+     Durées resserrées après la revue UX : environ 1,1 s en tout, cascade de 30 ms. L'interface reste
+     utilisable pendant la séquence (aucun blocage de la saisie). */
+  function jouer() {
+    if (!window.gsap || reduce) return;
+    document.querySelectorAll('.frame').forEach(function (f) {
+      var tl = gsap.timeline({ defaults: { ease: 'power3.out', clearProps: 'transform,opacity' } });
+      tl.from(f.querySelectorAll('.eyebrow i'), { scaleX: 0, transformOrigin: 'left center', duration: .35 })
+        .from(f.querySelectorAll('.titre .mot > span'), { yPercent: 115, duration: .5, stagger: .07 }, '-=.2')
+        .from(f.querySelectorAll('.p-hero .sous, .d-hero .sous, .d-hero .cta, .frise li'), { opacity: 0, y: 8, duration: .3, stagger: .04 }, '-=.25')
+        .from(f.querySelectorAll('.filet'), { scaleX: 0, duration: .4 }, '-=.5')
+        .from(f.querySelectorAll('.card, .rail a, .tab'), { opacity: 0, y: 8, duration: .3, stagger: .03 }, '-=.3');
+    });
+  }
+
+  /* ---- File « À traiter » : sélection groupée, tri accessible, annulation ---- */
+  var table = document.getElementById('file');
+  var tbody = table.tBodies[0];
+  var bulk = document.getElementById('bulk');
+  var toast = document.getElementById('toast');
+  var timer;
+
+  function selection() { return Array.prototype.slice.call(tbody.querySelectorAll('.sel:checked')); }
+  function majBulk() {
+    var n = selection().length;
+    bulk.hidden = n === 0;
+    document.getElementById('bulk-n').textContent = n;
+    document.getElementById('bulk-t').textContent = n > 1 ? 'remises sélectionnées' : 'remise sélectionnée';
+  }
+  tbody.addEventListener('change', majBulk);
+  document.getElementById('bulk-clear').addEventListener('click', function () {
+    selection().forEach(function (c) { c.checked = false; }); majBulk();
+  });
+
+  function afficherToast(texte, annuler) {
+    clearTimeout(timer);
+    document.getElementById('toast-t').textContent = texte;
+    toast.hidden = false;
+    document.getElementById('toast-undo').onclick = function () { annuler(); toast.hidden = true; };
+    timer = setTimeout(function () { toast.hidden = true; }, 6000); /* 3 à 5 s conseillées ; 6 s ici pour laisser le temps d'annuler */
+  }
+
+  document.getElementById('bulk-ok').addEventListener('click', function () {
+    var lignes = selection().map(function (c) { return c.closest('tr'); });
+    var avant = lignes.map(function (tr) { var ch = tr.querySelector('.chip'); return { tr: tr, cls: ch.className, txt: ch.textContent }; });
+    lignes.forEach(function (tr) {
+      var ch = tr.querySelector('.chip'); ch.className = 'chip ok'; ch.textContent = 'Validée';
+      tr.classList.add('fait');
+      var c = tr.querySelector('.sel'); c.checked = false; c.disabled = true;
+    });
+    majBulk();
+    afficherToast(lignes.length + (lignes.length > 1 ? ' remises validées' : ' remise validée'), function () {
+      avant.forEach(function (a) {
+        var ch = a.tr.querySelector('.chip'); ch.className = a.cls; ch.textContent = a.txt;
+        a.tr.classList.remove('fait'); a.tr.querySelector('.sel').disabled = false;
+      });
+    });
+  });
+
+  table.tHead.addEventListener('click', function (e) {
+    var b = e.target.closest('.th'); if (!b) return;
+    var th = b.parentNode, cle = b.dataset.cle;
+    var sens = th.getAttribute('aria-sort') === 'ascending' ? 'descending' : 'ascending';
+    table.tHead.querySelectorAll('th[aria-sort]').forEach(function (x) { x.setAttribute('aria-sort', 'none'); });
+    th.setAttribute('aria-sort', sens);
+    var rows = Array.prototype.slice.call(tbody.rows);
+    rows.sort(function (a, c) {
+      var x = a.dataset[cle], y = c.dataset[cle];
+      var r = cle === 'recue' ? Number(x) - Number(y) : x.localeCompare(y, 'fr');
+      return sens === 'ascending' ? r : -r;
+    });
+    rows.forEach(function (r) { tbody.appendChild(r); });
+  });
+  document.getElementById('rejouer').addEventListener('click', jouer);
+  window.addEventListener('load', jouer);
+})();
+</script>
+</body>
+</html>
