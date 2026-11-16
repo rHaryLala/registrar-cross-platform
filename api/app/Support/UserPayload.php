@@ -9,6 +9,7 @@ use App\Domain\Directory\Directory;
 use App\Domain\Finance\Balances;
 use App\Domain\Finance\Deadlines;
 use App\Domain\Finance\Reenrolment;
+use App\Domain\Finance\Tariff;
 use App\Domain\Students\StudentCreation;
 use App\Domain\Teacher\TeacherAccess;
 use App\Models\User;
@@ -62,6 +63,9 @@ final class UserPayload
         }
         if (Deadlines::allows($user)) {
             $finance['deadlines'] = true;
+        }
+        if (Tariff::allows($user)) {
+            $finance['tariff'] = true;
         }
 
         return $finance === [] ? null : $finance;

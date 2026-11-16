@@ -2108,6 +2108,127 @@ console.log("\n7k. Finance : échéances de paiement");
   check("côté serveur aussi : ordre refusé (422), type inconnu (422), session inconnue (404)", bad.map((r) => r.status).join("/") === "422/422/404", bad.map((r) => r.status).join("/"));
 }
 
+console.log("\n7l. Finance : barème par session et frais supplémentaires");
+{
+  const API = "http://localhost:8000";
+  const apiAs = async (pseudo, password) => {
+    const jar = {};
+    const take = (res) => { for (const c of res.headers.getSetCookie?.() ?? []) { const [kv] = c.split(";"); const i = kv.indexOf("="); jar[kv.slice(0, i)] = kv.slice(i + 1); } };
+    const base = { Origin: WEB, Referer: WEB + "/", Accept: "application/json" };
+    take(await fetch(API + "/api/v1/auth/csrf", { headers: base }));
+    const call = async (method, p, body) => {
+      const res = await fetch(API + p, { method, headers: { ...base, "Content-Type": "application/json", Cookie: Object.entries(jar).map(([k, v]) => `${k}=${v}`).join("; "), "X-XSRF-TOKEN": decodeURIComponent(jar["XSRF-TOKEN"] ?? "") }, body: body ? JSON.stringify(body) : undefined });
+      take(res);
+      return { status: res.status, json: await res.json().catch(() => null) };
+    };
+    await call("POST", "/api/v1/auth/login", { identifier: pseudo, password });
+    return call;
+  };
+  const BASE = "/api/v1/staff/finance/tariff";
+  const YEAR = "2098 - 2099";
+  const reg = await apiAs("registraire.demo", PASSWORD);
+  const serverCard = async (sigle, semester = 1) => (await reg("GET", BASE + `?annee=${encodeURIComponent(YEAR)}&semestre=${semester}`)).json.data.mentions.find((m) => m.sigle === sigle);
+  const fire = (sel, v, kind = "input") => ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); const proto = e.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype; Object.getOwnPropertyDescriptor(proto, 'value').set.call(e, ${JSON.stringify(v)}); e.dispatchEvent(new Event(${JSON.stringify(kind)}, { bubbles: true })); })()`);
+  const cardOf = (label) => `[...document.querySelectorAll('main h2')].find(h => h.innerText.trim() === ${JSON.stringify(label)})?.closest('[data-slot="card"]')`;
+  const setAmount = (label, field, status, value) => ev(`(() => { const card = ${cardOf(label)}; const input = [...card.querySelectorAll('input')].find(i => i.getAttribute('aria-label') === ${JSON.stringify(field + " — " + status)}); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(value)}); input.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+  const amount = (label, field, status) => ev(`(() => { const card = ${cardOf(label)}; return [...card.querySelectorAll('input')].find(i => i.getAttribute('aria-label') === ${JSON.stringify(field + " — " + status)})?.value; })()`);
+  const cardText = (label) => ev(`${cardOf(label)}.innerText.replace(/\\s+/g, ' ')`);
+  const cardClick = (label, re) => ev(`(() => { const card = ${cardOf(label)}; const b = [...card.querySelectorAll('button')].find(x => ${re}.test(x.innerText)); if (!b || b.disabled) return false; b.click(); return true; })()`);
+  const lay = async () => JSON.parse(await ev(`JSON.stringify({ scroll: document.documentElement.scrollWidth, inner: innerWidth, h1: document.querySelectorAll('h1').length, sansNom: [...document.querySelectorAll('a,button,input,select')].filter(e => !(e.getAttribute('aria-label') || e.innerText?.trim() || e.labels?.length || e.getAttribute('placeholder'))).length })`));
+
+  await go("/login/");
+  await type("#identifier", "registraire.demo");
+  await type("#password", PASSWORD);
+  await submit();
+  await until("location.pathname === '/'", "accueil registraire (barème)");
+  await go("/finance/bareme/");
+  await until("!document.querySelector('[aria-busy=true]') && !!document.querySelector('select')", "page barème", 25000);
+  await ev("window.confirm = () => true;");
+  await fire("select", YEAR, "change");
+  await until(`document.querySelector('select').value === ${JSON.stringify(YEAR)} && [...document.querySelectorAll('main h2')].some(h => h.innerText.trim() === 'Informatique')`, "année choisie", 20000);
+  const titles = await ev("[...document.querySelectorAll('main h2')].map(h => h.innerText.trim())");
+  check("les filières OUVERTES ont une carte (Informatique, Gestion), pas celles qui sont fermées (Éducation)", titles.includes("Informatique") && titles.includes("Gestion") && !titles.includes("Éducation"), titles.join());
+  const head = (await ev("document.querySelector('main').innerText.replace(/\\s+/g, ' ')"));
+  check("la page dit que la session n'a aucun ajustement : « hérite du barème de base »", /Aucun ajustement : hérite du barème de base/.test(head));
+  check("la carte d'une filière sans ajustement dit « Hérite du barème de base »", /Hérite du barème de base/.test(await cardText("Informatique")));
+  check("les montants du barème de base s'affichent (Licence 1, interne : frais généraux 100000, écolage 20000)", (await amount("Informatique", "Frais généraux / semestre", "Interne")) === "100000" && (await amount("Informatique", "Écolage (multiplié par le nombre de crédits)", "Interne")) === "20000", await amount("Informatique", "Frais généraux / semestre", "Interne"));
+  check("au semestre 1, ni frais de graduation ni frais de costume pour Informatique", !/graduation|costume/i.test(await cardText("Informatique")));
+  await shot("07zl-bareme");
+
+  // --- ajuster une filière : la surcharge naît de la base
+  await setAmount("Informatique", "Frais généraux / semestre", "Interne", "abc");
+  check("un montant illisible est signalé, et « Enregistrer » est désactivé", await until(`/un nombre positif ou nul est attendu/.test((${cardOf("Informatique")})?.innerText ?? '') && (() => { const b = [...(${cardOf("Informatique")}).querySelectorAll('button')].find(x => /^Enregistrer$/.test(x.innerText)); return !!b && b.disabled; })()`, "montant invalide", 8000));
+  await setAmount("Informatique", "Frais généraux / semestre", "Interne", "120 000");
+  check("la carte compte « 1 montant modifié » et propose d'enregistrer", await until(`/1 montant modifié/.test((${cardOf("Informatique")})?.innerText ?? '')`, "1 modifié", 8000));
+  await cardClick("Informatique", "/^Enregistrer$/");
+  check("l'enregistrement aboutit : « enregistré (1 ligne(s), dont 1 nouvelle(s)) »", await until("/enregistré \\(1 ligne\\(s\\), dont 1 nouvelle\\(s\\)\\)/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '')", "toast enregistré", 15000));
+  const info = await serverCard("INFO");
+  const cell = info.grid["1|Interne"];
+  check("côté serveur : la surcharge existe, 120 000 pour les frais généraux, et l'écolage (non transmis) est HÉRITÉ de la base (20 000, pas 0)", cell.source === "session" && cell.values.frais_generaux === 120000 && cell.values.ecolage === 20000 && info.adjusted === true, JSON.stringify(cell));
+  check("l'autre statut (Externe), non modifié, reste celui de la base", info.grid["1|Externe"].source === "base" && info.grid["1|Externe"].values.frais_generaux === 90000);
+  check("la page dit « Tarif propre à cette session » et « 1 / n filière(s) ajustée(s) »", await until("/Tarif propre à cette session/.test(document.body.innerText) && /1 \\/ \\d+ filières? ajustées?/.test(document.body.innerText)", "tarif propre", 15000));
+
+  // --- appliquer les mêmes montants à une autre filière
+  await setAmount("Informatique", "Écolage (multiplié par le nombre de crédits)", "Externe", "21000");
+  await until(`/1 montant modifié/.test((${cardOf("Informatique")})?.innerText ?? '')`, "modifié (externe)", 8000);
+  await ev(`(() => { const card = ${cardOf("Informatique")}; card.querySelector('details summary').click(); })()`);
+  await ev(`(() => { const card = ${cardOf("Informatique")}; const box = [...card.querySelectorAll('details label')].find(l => /Gestion/.test(l.innerText)).querySelector('input'); box.click(); })()`);
+  check("« Appliquer aussi à… » propose les autres filières ouvertes et compte la sélection", /Appliquer aussi à d’autres filières \(1\)/.test(await cardText("Informatique")));
+  await cardClick("Informatique", "/Enregistrer et appliquer/");
+  check("l'application à deux filières est confirmée : « appliqué à 2 filières »", await until("/appliqué à 2 filières/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '')", "toast appliqué", 15000));
+  const gest = await serverCard("GEST");
+  check("la filière Gestion a reçu le même écolage externe (21 000) en surcharge, le reste hérité de sa base", gest.adjusted === true && gest.grid["1|Externe"].source === "session" && gest.grid["1|Externe"].values.ecolage === 21000 && gest.grid["1|Externe"].values.frais_generaux === 85000, JSON.stringify(gest.grid["1|Externe"]));
+
+  // --- retour à la base, puis reprise de la base
+  await until(`/Tarif propre à cette session/.test((${cardOf("Gestion")})?.innerText ?? '')`, "carte Gestion propre", 15000);
+  await cardClick("Gestion", "/Revenir à la base/");
+  check("« Revenir à la base » supprime le tarif propre de Gestion (le serveur le confirme)", await until("/supprimée/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '')", "toast supprimé", 15000) && (await serverCard("GEST")).adjusted === false);
+  await until(`/Hérite du barème de base/.test((${cardOf("Gestion")})?.innerText ?? '')`, "Gestion hérite de nouveau", 15000);
+  await cardClick("Gestion", "/Reprendre la base/");
+  check("« Reprendre la base » recrée les lignes propres à la session à partir de la base", await until("/reprise/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '')", "toast repris", 15000) && (await serverCard("GEST")).adjusted === true);
+
+  // --- le semestre 2 montre la graduation, et le barème de base se modifie sans surcharge
+  await ev("[...document.querySelectorAll('[role=tab]')].find(b => /Deuxième semestre/.test(b.innerText)).click()");
+  check("au semestre 2, le frais de graduation apparaît", await until(`/Frais de graduation/.test((${cardOf("Informatique")})?.innerText ?? '')`, "graduation S2", 15000));
+  check("le semestre 2 n'a aucun ajustement et hérite de la base", /Aucun ajustement : hérite du barème de base/.test(await ev("document.querySelector('main').innerText.replace(/\\s+/g, ' ')")));
+
+  // --- frais supplémentaires
+  await ev("[...document.querySelectorAll('main details')].find(d => /Frais supplémentaires/.test(d.querySelector('summary').innerText)).querySelector('summary').click()");
+  await fire("input[aria-label='Nom du frais à ajouter']", "Démo Photocopies");
+  await ev("[...document.querySelectorAll('main details form button')].find(b => /Ajouter/.test(b.innerText)).click()");
+  check("un frais supplémentaire s'ajoute : confirmation et ligne dans la liste", await until("/Frais ajouté/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '') && /Démo Photocopies/.test(document.querySelector('main details').innerText)", "frais ajouté", 15000));
+  const fee = (await reg("GET", BASE + `?annee=${encodeURIComponent(YEAR)}&semestre=1`)).json.data.extra_fees.find((f) => f.label === "Démo Photocopies");
+  check("côté serveur : le frais est actif, facturé à « aucune » condition, tous les semestres", fee && fee.active === true && fee.condition === "aucune" && fee.semesters === "", JSON.stringify(fee));
+  await ev("[...document.querySelectorAll('[role=tab]')].find(b => /Premier semestre/.test(b.innerText)).click()");
+  await until(`/Démo Photocopies/.test((${cardOf("Informatique")})?.innerText ?? '')`, "ligne du frais dans la carte", 15000);
+  await setAmount("Informatique", "Démo Photocopies", "Interne", "5000");
+  await until(`/1 montant modifié/.test((${cardOf("Informatique")})?.innerText ?? '')`, "frais modifié", 8000);
+  await cardClick("Informatique", "/^Enregistrer$/");
+  check("le montant du frais s'enregistre pour la session (« 1 montant(s) de frais supplémentaires »)", await until("/1 montant\\(s\\) de frais supplémentaires/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '')", "toast frais", 15000));
+  const withFee = await serverCard("INFO");
+  check("côté serveur : 5 000 pour le frais, niveau 1 interne, propre à la session", withFee.extra[fee.id]["1|Interne"].amount === 5000 && withFee.extra[fee.id]["1|Interne"].inherited === false, JSON.stringify(withFee.extra[fee.id]["1|Interne"]));
+  // régler le frais : semestre 2 seulement, puis le désactiver
+  await ev("(() => { const d = [...document.querySelectorAll('main details')].find(x => /Frais supplémentaires/.test(x.querySelector('summary').textContent)); if (d && !d.open) d.querySelector('summary').click(); })()");
+  await until("[...document.querySelectorAll('main details li')].some(l => /Démo Photocopies/.test(l.textContent))", "frais dans la liste", 15000);
+  await ev(`(() => { const li = [...document.querySelectorAll('main details li')].find(l => /Démo Photocopies/.test(l.textContent)); const boxes = [...li.querySelectorAll('input[type=checkbox]')]; boxes[1].click(); })()`);
+  await ev(`(() => { const li = [...document.querySelectorAll('main details li')].find(l => /Démo Photocopies/.test(l.textContent)); [...li.querySelectorAll('button')].find(b => /Appliquer/.test(b.innerText)).click(); })()`);
+  check("le réglage « semestre 2 seulement » est enregistré", await until("/Réglage enregistré/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '')", "réglage", 15000) && (await reg("GET", BASE)).json.data.extra_fees.find((f) => f.id === fee.id).semesters === "2");
+  await ev(`(() => { const li = [...document.querySelectorAll('main details li')].find(l => /Démo Photocopies/.test(l.textContent)); li.querySelector('button[aria-label^="Désactiver"]').click(); })()`);
+  check("désactiver le frais le garde dans la liste, marqué « désactivé » (montants et historique conservés)", await until("/désactivé/.test(document.querySelector('main details')?.innerText ?? '') && /Frais désactivé/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '')", "frais désactivé", 15000));
+  const l1 = await lay();
+  check("page du barème : aucun défilement horizontal, un seul h1, contrôles nommés", l1.scroll <= l1.inner && l1.h1 === 1 && l1.sansNom === 0, JSON.stringify(l1));
+  await ev("document.querySelector('button[aria-label^=\"Se déconnecter\"]').click()");
+  await until("location.pathname.startsWith('/login')", "déconnexion registraire (barème)");
+
+  // --- les droits : niveaux 1 à 3
+  const cash = await apiAs("ancien.demo", PASSWORD);
+  const student = await apiAs("etudiant.demo", PASSWORD);
+  const denied = [await cash("GET", BASE), await cash("PUT", BASE, { session_id: 0 }), await student("GET", BASE), await student("POST", BASE + "/reset", {}), await student("PATCH", "/api/v1/staff/finance/extra-fees/1", {})];
+  check("la comptabilité et un étudiant n'ouvrent ni le barème ni ses écritures, même par l'API (403, avant toute validation)", denied.every((r) => r.status === 403), denied.map((r) => r.status).join("/"));
+  const bad = [await reg("PUT", BASE, { session_id: 0, mention: "INFO", semester: 1, amounts: { "1|Interne": { ecolage: -5 } } }), await reg("PUT", BASE, { session_id: 0, mention: "ZZZ", semester: 1, amounts: { "1|Interne": { ecolage: 5 } } }), await reg("POST", BASE + "/reset", { session_id: 0 })];
+  check("côté serveur : montant négatif (422), filière inconnue (422), suppression du barème de base (422)", bad.map((r) => r.status).join("/") === "422/422/422", bad.map((r) => r.status).join("/"));
+}
+
 console.log("\n8. Journal de la console et du réseau");
 check("aucune erreur JavaScript ni requête en échec", problems.length === 0, problems.slice(0, 3).join(" | "));
 

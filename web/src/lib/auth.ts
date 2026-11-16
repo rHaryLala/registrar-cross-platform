@@ -38,7 +38,7 @@ export type User = {
   /** Créer un étudiant : superadmin, administration et registrariat (niveaux 1 à 3). */
   student_creation: boolean;
   /** Finance : autorisation de réinscription (niveaux 1, 3 et 4, avec ce que le compte peut y écrire) et solde de compte (niveaux 1 à 4) et échéances de paiement (niveaux 1 à 4) ; null : aucune page. */
-  finance: { reenrolment?: { authorization: boolean; file: boolean; reset: boolean }; balances?: boolean; deadlines?: boolean } | null;
+  finance: { reenrolment?: { authorization: boolean; file: boolean; reset: boolean }; balances?: boolean; deadlines?: boolean; tariff?: boolean } | null;
 };
 
 export const meKey = ["me"] as const;

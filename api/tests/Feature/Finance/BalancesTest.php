@@ -82,7 +82,7 @@ class BalancesTest extends TestCase
         $this->getJson(self::BASE)->assertUnauthorized();
         $this->putJson(self::BASE.'/1/1', ['balance' => 1])->assertUnauthorized();
         $this->api($this->registrar())->getJson('/api/v1/auth/me')->assertJsonPath('data.finance.balances', true);
-        $this->api($this->as(2, 'admin'))->getJson('/api/v1/auth/me')->assertJsonPath('data.finance', ['balances' => true, 'deadlines' => true]);
+        $this->api($this->as(2, 'admin'))->getJson('/api/v1/auth/me')->assertJsonPath('data.finance', ['balances' => true, 'deadlines' => true, 'tariff' => true]);
         $this->api($this->as(4, 'comptabilite'))->getJson('/api/v1/auth/me')->assertJsonPath('data.finance.balances', true);
         $this->api($this->as(5, 'media'))->getJson('/api/v1/auth/me')->assertJsonPath('data.finance', null);
     }

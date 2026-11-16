@@ -150,3 +150,12 @@ export function RequireDeadlines({ children }: { children: ReactNode }) {
     </RequireRole>
   );
 }
+
+/** Barème financier : niveaux 1 à 3 (superadmin, administration, registrariat), comme l’ancienne page. Le droit réel est vérifié par l’API. */
+export function RequireTariff({ children }: { children: ReactNode }) {
+  return (
+    <RequireRole allow={["superadmin", "admin", "registrar"]} reserved="au registrariat">
+      {children}
+    </RequireRole>
+  );
+}

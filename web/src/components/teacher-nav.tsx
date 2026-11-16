@@ -1,6 +1,6 @@
 "use client";
 
-import { BadgeCheck, BookOpenCheck, CalendarCheck, CalendarClock, ClipboardCheck, Ellipsis, FileUser, GraduationCap, House, Library, UserRoundX, UsersRound, Wallet, type LucideIcon } from "lucide-react";
+import { BadgeCheck, Banknote, BookOpenCheck, CalendarCheck, CalendarClock, ClipboardCheck, Ellipsis, FileUser, GraduationCap, House, Library, UserRoundX, UsersRound, Wallet, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMe } from "@/lib/auth";
@@ -20,6 +20,7 @@ export const NAV_ICONS: Record<NavIcon, LucideIcon> = {
   reenrolment: BadgeCheck,
   balances: Wallet,
   deadlines: CalendarClock,
+  tariff: Banknote,
   more: Ellipsis,
 };
 

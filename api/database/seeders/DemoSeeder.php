@@ -317,6 +317,7 @@ class DemoSeeder extends Seeder
         $app('Demo Deja Converti', 'converti', ['student_id' => 'DEMO-0001', 'archive_le' => now()->subDay()->format('Y-m-d H:i:s'), 'archive_par' => 'Registraire Demo', 'date_traitement' => now()->subDay()->format('Y-m-d H:i:s')]);
 
         $this->balances();
+        $this->tariff();
     }
 
     /**
@@ -346,6 +347,35 @@ class DemoSeeder extends Seeder
         $row(102, '-25000.00');
         $row(103, '0.00');
         $row(105, null, ['total_payment' => '500 000', 'amount_pay_1' => '150 000', 'amount_pay_2' => '50 000']);
+    }
+
+    /**
+     * Barème par session : une année « 2098 - 2099 » à part (deux sessions) pour que les écrans du barème aient une année sans ambiguïté, et un barème de BASE
+     * pour deux filières ouvertes (INFO et GEST) aux semestres 1 et 2, niveau Licence 1. Un frais supplémentaire « Démo Alliance » (sans montant) est ajouté.
+     */
+    private function tariff(): void
+    {
+        $old = DB::table('t_2023_session')->where('session_code', 'LIKE', 'DEMO-BAREME%')->pluck('session_id');
+        DB::table('t_2024_finance_detail_licence')->whereIn('session_id', $old)->delete();
+        DB::table('t_frais_perso_montant')->whereIn('session_id', $old)->delete();
+        DB::table('t_2023_session')->where('session_code', 'LIKE', 'DEMO-BAREME%')->delete();
+        $feeIds = DB::table('t_frais_perso')->where('libelle', 'LIKE', 'Démo%')->pluck('id');
+        DB::table('t_frais_perso_montant')->whereIn('frais_id', $feeIds)->delete();
+        DB::table('t_frais_perso')->where('libelle', 'LIKE', 'Démo%')->delete();
+
+        foreach ([1 => 'Premier semestre', 2 => 'Deuxième semestre'] as $sem => $name) {
+            DB::table('t_2023_session')->insert(['session_code' => 'DEMO-BAREME-'.$sem, 'session_name' => $name.' (barème démo)', 'session_year' => '2098 - 2099', 'session_semester' => $sem, 'selected' => 0, 'date_entry' => '2098-09-01']);
+        }
+        DB::table('t_2024_finance_detail_licence')->where('session_id', 0)->whereIn('std_mention', ['INFO', 'GEST'])->delete();
+        $zero = ['frais_generaux' => 0, 'laboratory_info' => 0, 'laboratory_lang' => 0, 'dortoir' => 0, 'cafeteria' => 0, 'fond_depot' => 0, 'nb_jours_semestre' => 0, 'ecolage' => 0, 'frais_graduation' => 0, 'frais_costume' => 0, 'frais_voyage' => 0];
+        foreach (['INFO' => [100000, 20000, 90000], 'GEST' => [100000, 18000, 85000]] as $mention => [$internal, $tuition, $external]) {
+            foreach ([1, 2] as $sem) {
+                foreach (['Interne' => $internal, 'Externe' => $external] as $status => $general) {
+                    DB::table('t_2024_finance_detail_licence')->insert(array_merge($zero, ['session_id' => 0, 'categorie' => 'L', 'std_status' => $status, 'std_mention' => $mention, 'level' => 1, 'semester' => $sem, 'frais_generaux' => $general, 'ecolage' => $tuition]));
+                }
+            }
+        }
+        DB::table('t_frais_perso')->insert(['libelle' => 'Démo Alliance', 'actif' => 1, 'ordre' => 900, 'condition_frais' => 'aucune', 'semestres' => '', 'date_entry' => now()->format('Y-m-d H:i:s')]);
     }
 
     private function quiz(): void

@@ -6,7 +6,7 @@
  */
 import type { User } from "@/lib/auth";
 
-export type NavIcon = "home" | "presence" | "notes" | "review" | "attendance" | "students" | "courses" | "teachers" | "applications" | "reenrolment" | "balances" | "deadlines" | "more";
+export type NavIcon = "home" | "presence" | "notes" | "review" | "attendance" | "students" | "courses" | "teachers" | "applications" | "reenrolment" | "balances" | "deadlines" | "tariff" | "more";
 export type NavEntry = { href: string; label: string; icon: NavIcon; hint: string };
 
 export const HOME_ENTRY: NavEntry = { href: "/", label: "Accueil", icon: "home", hint: "" };
@@ -33,6 +33,7 @@ export function staffEntries(me: (Pick<User, "teacher_space" | "review_space" | 
     ...(me.finance?.reenrolment ? [{ href: "/finance/reinscription/", label: "Réinscription", icon: "reenrolment" as const, hint: "Autoriser la réinscription (caisse) et valider les dossiers (registraire), étudiant par étudiant ou par groupe." }] : []),
     ...(me.finance?.balances ? [{ href: "/finance/soldes/", label: "Soldes", icon: "balances" as const, hint: "Dette ou avance de chaque étudiant inscrit à une session ; correction du solde enregistré." }] : []),
     ...(me.finance?.deadlines ? [{ href: "/finance/echeances/", label: "Échéances", icon: "deadlines" as const, hint: "La date limite de chaque tranche de paiement, session par session : elle s’imprime sur la fiche d’inscription." }] : []),
+    ...(me.finance?.tariff ? [{ href: "/finance/bareme/", label: "Barème", icon: "tariff" as const, hint: "Les tarifs de chaque filière, niveau et statut, ajustables à chaque session ; frais supplémentaires." }] : []),
   ];
 }
 

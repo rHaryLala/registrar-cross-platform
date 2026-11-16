@@ -56,3 +56,9 @@ Ordre prudent :
 
 - **Aucune migration** : table `t_paiement_echeance` de l'ancienne application (`data/migration_paiement_echeances.sql`, rejouable). Elle est aussi lue par la fiche d'inscription de l'espace étudiant : à vérifier en production avant toute mise en ligne.
 - Accès niveaux 1 à 4 (la comptabilité y a accès, l'ancienne page s'arrêtait au niveau 3).
+
+### Barème financier et frais supplémentaires
+
+- **Une migration** : `php artisan migrate --force` joue `2026_11_18_000001_create_extra_fee_tables`, qui crée `t_frais_perso`, `t_frais_perso_montant` et `t_2024_etudiant_frais_perso` **seulement si elles manquent** (l'ancienne application les créait à la première ouverture de sa page « Gestion finance » : si cette page a déjà été ouverte en production, rien ne change). Aucune table existante n'est modifiée.
+- Le barème est dans `t_2024_finance_detail_licence` (table de l'ancienne application, colonne `session_id` : 0 = barème de base).
+- Accès niveaux 1 à 3 (comme l'ancienne page). Journal d'activité : une entrée par enregistrement, reprise, retour à la base et réglage de frais.

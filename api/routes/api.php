@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\V1\BalancesController;
 use App\Http\Controllers\Api\V1\DeadlinesController;
 use App\Http\Controllers\Api\V1\DirectoryController;
 use App\Http\Controllers\Api\V1\ReenrolmentController;
+use App\Http\Controllers\Api\V1\TariffController;
 use App\Http\Controllers\Api\V1\ReviewAttendanceController;
 use App\Http\Controllers\Api\V1\StudentCreationController;
 use App\Http\Controllers\Api\V1\ReviewRemiseController;
@@ -119,6 +120,15 @@ Route::prefix('v1')->group(function () {
             });
             // Finance : solde de compte par session (niveaux 1 à 3) ; le solde se corrige ligne par ligne.
             Route::get('finance/balances', [BalancesController::class, 'index']);
+            // Barème par session (niveaux 1 à 3) : grille, application à plusieurs filières, reprise de la base, retour à la base ; frais supplémentaires.
+            Route::get('finance/tariff', [TariffController::class, 'show']);
+            Route::middleware('throttle:teacher-write')->group(function () {
+                Route::put('finance/tariff', [TariffController::class, 'save']);
+                Route::post('finance/tariff/copy', [TariffController::class, 'copy']);
+                Route::post('finance/tariff/reset', [TariffController::class, 'reset']);
+                Route::post('finance/extra-fees', [TariffController::class, 'createFee']);
+                Route::patch('finance/extra-fees/{id}', [TariffController::class, 'updateFee'])->whereNumber('id');
+            });
             // Échéances de paiement : la date limite de chaque tranche, par session (niveaux 1 à 4).
             Route::get('finance/deadlines', [DeadlinesController::class, 'show']);
             Route::put('finance/deadlines/{session}', [DeadlinesController::class, 'save'])->whereNumber('session')->middleware('throttle:teacher-write');

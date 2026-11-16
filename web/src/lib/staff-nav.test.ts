@@ -22,6 +22,12 @@ describe("pages du menu du personnel", () => {
     expect(staffEntries({ ...base, directory: ["students"] }).map((e) => e.href)).toEqual(["/", "/etudiants/"]);
     expect(matches("/finance/reinscription/", "/finance/reinscription/")).toBe(true);
   });
+  it("les pages de finance (soldes, échéances, barème) suivent les droits du compte, dans cet ordre", () => {
+    const finance = { reenrolment: { authorization: true, file: true, reset: false }, balances: true, deadlines: true, tariff: true };
+    expect(staffEntries({ ...base, directory: ["students"], finance }).map((e) => e.href)).toEqual(["/", "/etudiants/", "/finance/reinscription/", "/finance/soldes/", "/finance/echeances/", "/finance/bareme/"]);
+    expect(staffEntries({ ...base, finance: { balances: true, deadlines: true } }).map((e) => e.href)).toEqual(["/", "/finance/soldes/", "/finance/echeances/"]);
+    expect(staffEntries({ ...base, finance: { tariff: true } }).map((e) => e.label)).toEqual(["Accueil", "Barème"]);
+  });
   it("une liste absente du profil n'a pas d'entrée (jamais de lien mort)", () => {
     expect(staffEntries({ ...base, directory: ["courses"] }).map((e) => e.href)).toEqual(["/", "/cours/"]);
     expect(staffEntries({ ...base, directory: undefined as unknown as User["directory"] }).map((e) => e.href)).toEqual(["/"]);
