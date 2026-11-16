@@ -84,3 +84,13 @@ export function maskTail(value: string, keep = 4): string {
   if (compact.length <= keep) return "•".repeat(compact.length);
   return `${"•".repeat(compact.length - keep).replace(/(.{4})(?=.)/g, "$1 ")} ${compact.slice(-keep)}`.trim();
 }
+
+/** 83 000 ms → « 01:23 » ; au-delà d'une heure « 1:02:03 ». Jamais de valeur négative ni de « NaN ». */
+export function formatClock(ms: number): string {
+  const total = Number.isFinite(ms) && ms > 0 ? Math.floor(ms / 1000) : 0;
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const two = (n: number) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${two(m)}:${two(s)}` : `${two(m)}:${two(s)}`;
+}

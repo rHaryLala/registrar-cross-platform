@@ -1,13 +1,8 @@
 import type { Metadata } from "next";
-import { RequireStudent } from "@/components/require-student";
-import { StudentGrades } from "@/components/student-grades";
+import { NotesGate } from "@/components/notes-gate";
 
-export const metadata: Metadata = { title: "Mes notes" };
+export const metadata: Metadata = { title: "Notes" };
 
 export default function NotesPage() {
-  return (
-    <RequireStudent>
-      <StudentGrades />
-    </RequireStudent>
-  );
+  return <NotesGate />;
 }

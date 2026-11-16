@@ -1,13 +1,8 @@
 import type { Metadata } from "next";
-import { RequireStudent } from "@/components/require-student";
-import { StudentAttendance } from "@/components/student-attendance";
+import { PresenceGate } from "@/components/presence-gate";
 
-export const metadata: Metadata = { title: "Mon assiduité" };
+export const metadata: Metadata = { title: "Présence" };
 
 export default function PresencePage() {
-  return (
-    <RequireStudent>
-      <StudentAttendance />
-    </RequireStudent>
-  );
+  return <PresenceGate />;
 }

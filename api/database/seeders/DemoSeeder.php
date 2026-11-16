@@ -19,6 +19,7 @@ use RuntimeException;
  *   etudiant.vide  (étudiant sans aucune note)
  *   registraire.demo (personnel, niveau 3)
  *   ancien.demo    (ancien format de mot de passe sha256, converti à la première connexion)
+ *   enseignant.demo (enseignant, 2 cours dont un registre de présence déjà ouvert) et enseignant.autre (un autre enseignant : isolation)
  */
 class DemoSeeder extends Seeder
 {
@@ -32,7 +33,13 @@ class DemoSeeder extends Seeder
             'pseudo' => $pseudo, 'mail' => $pseudo.'@zurcher.edu.mg', 'student_id' => $matricule, 'nom' => $nom, 'prenom' => $prenom,
         ]);
 
-        User::query()->whereIn('pseudo', ['etudiant.demo', 'etudiant.vide', 'registraire.demo', 'ancien.demo'])->delete();
+        User::query()->whereIn('pseudo', ['etudiant.demo', 'etudiant.vide', 'registraire.demo', 'ancien.demo', 'enseignant.demo', 'enseignant.autre', 'rindra'])->delete();
+        // Registres et cours de l'enseignant de démonstration (les pointages et signalements suivent : clés étrangères en cascade).
+        DB::table('t_presence_feuille')->whereIn('cours_id', DB::table('t_2023_cours')->where('Sigle', 'LIKE', 'DEMO %')->pluck('id'))->delete();
+        $demoRemises = DB::table('t_remise_notes')->whereIn('cours_id', DB::table('t_2023_cours')->where('Sigle', 'LIKE', 'DEMO %')->pluck('id'))->pluck('id');
+        DB::table('t_remise_notes_journal')->whereIn('remise_id', $demoRemises)->delete();
+        DB::table('t_remise_notes')->whereIn('id', $demoRemises)->delete();   // les lignes suivent (clé étrangère en cascade)
+        DB::table('teacher')->where('uid', '>=', 990100)->where('uid', '<', 990200)->delete();
         User::query()->where('student_id', 'LIKE', 'DEMO-%')->delete(); // dont les comptes créés par la connexion avec le mot de passe de la fiche
         DB::table('t_presence_feuille')->where('cours_id', '>=', 990000)->delete();
         $demoSessions = DB::table('t_2023_session')->where('session_code', 'LIKE', 'DEMO-%')->pluck('session_id');
@@ -59,7 +66,8 @@ class DemoSeeder extends Seeder
         $student('etudiant.demo', 'DEMO-0001', 'Rakoto', 'Fanja');
         $student('etudiant.vide', 'DEMO-0002', 'Andria', 'Tojo');
         User::factory()->staff(3, 'registrar')->create(['pseudo' => 'registraire.demo', 'mail' => 'registraire.demo@zurcher.edu.mg', 'nom' => 'Demo', 'prenom' => 'Registraire']);
-        User::factory()->legacyPassword()->staff(6, 'chef_mention')->create(['pseudo' => 'ancien.demo', 'mail' => 'ancien.demo@zurcher.edu.mg', 'nom' => 'Demo', 'prenom' => 'Ancien']);
+        User::factory()->legacyPassword()->staff(4, 'comptabilite')->create(['pseudo' => 'ancien.demo', 'mail' => 'ancien.demo@zurcher.edu.mg', 'nom' => 'Demo', 'prenom' => 'Ancien']);
+        User::factory()->staff(1, 'superadmin')->create(['pseudo' => 'superadmin.demo', 'mail' => 'superadmin.demo@zurcher.edu.mg', 'nom' => 'Demo', 'prenom' => 'Superadmin']);
 
         $s1 = $this->session('Session 1', '2025-2026', 1);
         $s2 = $this->session('Session 2', '2025-2026', 2);
@@ -80,11 +88,13 @@ class DemoSeeder extends Seeder
         }
 
         $this->attendance();
+        $this->teachers();
         $this->quiz();
         $this->enrollments();
         $this->studentFileLogins();
         $this->news();
         $this->siteNews();
+        $this->staffData();
 
         $this->command?->info('Comptes de démonstration créés. Mot de passe : '.UserFactory::PASSWORD);
     }
@@ -120,12 +130,224 @@ class DemoSeeder extends Seeder
         $mat = $sheet(990002, 'MAT 110', 'Mathématiques', null);
         $line($meeting($mat, '2026-09-07', '10:00:00'), 'present');
         $line($meeting($mat, '2026-09-14', '10:00:00'), 'retard', 12, 'medical');
+
+        // Assiduité du registrariat : un signalement dont l'étudiant est depuis revenu à la limite (une absence a été corrigée : 3 comptées sur 3
+        // permises), et un autre déjà traité.
+        DB::table('t_presence_signalement')->insert(['feuille_id' => $inf, 'student_id' => 'DEMO-0001', 'absences' => 4, 'seances_prevues' => 20, 'signale_le' => '2026-09-12 11:00:00']);
+        DB::table('t_presence_signalement')->insert(['feuille_id' => $mat, 'student_id' => 'DEMO-0001', 'absences' => 2, 'seances_prevues' => 10, 'signale_le' => '2026-09-10 11:00:00', 'traite_le' => '2026-09-20 09:00:00']);
+    }
+
+    /**
+     * Espace enseignant : enseignant.demo donne « DEMO 301 » (6 étudiants, 10 séances prévues = 1 absence permise) et « DEMO 302 » (2 étudiants, sans
+     * registre ouvert). Le registre de DEMO 301 a 3 séances : DEMO-0101 y a 2 absences (au-delà de 15 %, déjà signalé), DEMO-0102 en a 1
+     * (à la limite). enseignant.autre a son propre cours : l'un ne doit jamais voir ni toucher celui de l'autre.
+     */
+    private function teachers(): void
+    {
+        $year = '2026 - 2027';
+        $teacher = function (int $uid, string $name, string $lastName, string $pseudo) {
+            DB::table('teacher')->insert(['uid' => $uid, 'name' => $name, 'lastName' => $lastName, 'email' => $pseudo.'@zurcher.edu.mg', 'sex' => 0, 'remove' => 0]);
+
+            return User::factory()->staff(7, 'teacher')->create(['pseudo' => $pseudo, 'mail' => $pseudo.'@zurcher.edu.mg', 'nom' => $lastName, 'prenom' => $name, 'teacher_uid' => $uid]);
+        };
+        $teacher(990101, 'Hasina', 'Rasolofo', 'enseignant.demo');
+        $teacher(990102, 'Mamy', 'Ramanana', 'enseignant.autre');
+        // Compte de test demandé : identifiant « rindra », mot de passe « rindra2026 » (base de démonstration locale seulement).
+        DB::table('teacher')->insert(['uid' => 990103, 'name' => 'Rindra', 'lastName' => 'Test', 'email' => 'rindra@zurcher.edu.mg', 'sex' => 0, 'remove' => 0]);
+        User::factory()->staff(7, 'teacher')->create([
+            'pseudo' => 'rindra', 'mail' => 'rindra@zurcher.edu.mg', 'nom' => 'Test', 'prenom' => 'Rindra', 'teacher_uid' => 990103,
+            'password' => \Illuminate\Support\Facades\Hash::make('rindra2026'),
+        ]);
+
+        $course = fn (int $uid, string $code, string $title) => DB::table('t_2023_cours')->insertGetId([
+            'Sigle' => $code, 'title' => $title, 'id_teacher' => $uid, 'yearlevel' => 2, 'cout' => 0, 'cout_lab' => 0, 'ajout' => 0, 'remove' => 0,
+        ]);
+        $os = $course(990101, 'DEMO 301', 'Systèmes d’exploitation (démo)');
+        $os2 = $course(990101, 'DEMO 302', 'Réseaux avancés (démo)');
+        $other = $course(990102, 'DEMO 303', 'Cours d’un autre enseignant (démo)');
+
+        $enrol = function (int $courseId, string $id, string $nom, string $prenom) use ($year) {
+            if (! DB::table('tbl_2024_etudiant')->where('student_id', $id)->exists()) {
+                DB::table('tbl_2024_etudiant')->insert(['student_id' => $id, 'student_nom' => $nom, 'student_prenom' => $prenom, 'password' => '', 'abonment' => 0, 'annee_scolaire' => '2025-2026', 'period' => 'S1', 'remove' => 0]);
+            }
+            DB::table('t_2023_notes')->insert([
+                'id_cours' => (string) $courseId, 'student_id' => $id, 'semester' => 1, 'annee_scolaire' => $year, 'Sigle' => 'DEMO', 'title_cours' => 'Démo',
+                'cours_category' => 1, 'yearlevel' => 2, 'ajout' => 1, 'remove' => 0, 'user_id_entry' => 'demo',
+            ]);
+        };
+        $students = ['DEMO-0101' => ['Andrianina', 'Lalaina'], 'DEMO-0102' => ['Bezara', 'Mirana'], 'DEMO-0103' => ['Rabary', 'Toky'], 'DEMO-0104' => ['Ranaivo', 'Fitia'], 'DEMO-0105' => ['Razafy', 'Noro'], 'DEMO-0106' => ['Soloniaina', 'Tahina']];
+        foreach ($students as $id => [$nom, $prenom]) {
+            $enrol($os, $id, $nom, $prenom);
+        }
+        $enrol($other, 'DEMO-0107', 'Voahangy', 'Haingo');
+        $enrol($os2, 'DEMO-0101', 'Andrianina', 'Lalaina');
+        $enrol($os2, 'DEMO-0102', 'Bezara', 'Mirana');
+        // Le cours de rindra : 3 étudiants, aucun registre ni feuille ouverts (tout est à créer).
+        $rindraCourse = $course(990103, 'DEMO 304', 'Programmation web (démo rindra)');
+        foreach (['DEMO-0108' => ['Rabemananjara', 'Hanta'], 'DEMO-0109' => ['Randriamampionona', 'Lova'], 'DEMO-0110' => ['Rasolondraibe', 'Mahery']] as $id => [$nom, $prenom]) {
+            $enrol($rindraCourse, $id, $nom, $prenom);
+        }
+
+        $sheet = DB::table('t_presence_feuille')->insertGetId([
+            'cours_id' => $os, 'sigle' => 'DEMO 301', 'titre_cours' => 'Systèmes d’exploitation (démo)', 'teacher_uid' => 990101, 'annee_scolaire' => $year, 'semestre' => 1,
+            'seances_prevues' => 10, 'cree_le' => '2026-09-01 08:00:00', 'modifie_le' => '2026-09-01 08:00:00',
+        ]);
+        $marks = [
+            '2026-09-07' => ['DEMO-0101' => 'absent', 'DEMO-0102' => 'absent', 'DEMO-0103' => 'present', 'DEMO-0104' => 'present', 'DEMO-0105' => 'present', 'DEMO-0106' => 'present'],
+            '2026-09-14' => ['DEMO-0101' => 'absent', 'DEMO-0102' => 'present', 'DEMO-0103' => 'present', 'DEMO-0104' => 'present', 'DEMO-0105' => 'present', 'DEMO-0106' => 'present'],
+            '2026-09-21' => ['DEMO-0101' => 'present', 'DEMO-0102' => 'present', 'DEMO-0103' => 'present', 'DEMO-0104' => 'present', 'DEMO-0105' => 'present', 'DEMO-0106' => 'present'],
+        ];
+        foreach ($marks as $date => $lines) {
+            $m = DB::table('t_presence_seance')->insertGetId(['feuille_id' => $sheet, 'date_seance' => $date, 'heure_prevue' => '08:00:00', 'message_retard' => 0, 'cree_le' => $date.' 08:00:00', 'modifie_le' => $date.' 09:30:00']);
+            foreach ($lines as $id => $status) {
+                DB::table('t_presence_ligne')->insert(['seance_id' => $m, 'student_id' => $id, 'statut' => $status, 'modifie_le' => $date.' 09:30:00']);
+            }
+        }
+        $this->gradeSheets($os, $os2, $year);
+
+        // DEMO-0101 : 2 absences sur 10 prévues, 1 permise → au-delà de 15 %, déjà signalé au registrariat.
+        DB::table('t_presence_signalement')->insert(['feuille_id' => $sheet, 'student_id' => 'DEMO-0101', 'absences' => 2, 'seances_prevues' => 10, 'signale_le' => '2026-09-14 09:30:00']);
+    }
+
+    /**
+     * Feuilles de notes de l'enseignant de démonstration :
+     *  - DEMO 301 : brouillon (pondération par défaut) ; 3 étudiants complets, 1 incomplet, 1 en statut spécial, 1 vierge ;
+     *  - DEMO 302 : colonnes LIBRES (Devoir 1 / Projet / Examen, 30-30-40), renvoyée par le registrariat avec un motif ; à corriger puis retransmettre.
+     */
+    private function gradeSheets(int $os, int $os2, string $year): void
+    {
+        $remise = fn (int $course, string $code, string $title, string $status, array $extra = []) => DB::table('t_remise_notes')->insertGetId([
+            'cours_id' => $course, 'sigle' => $code, 'titre_cours' => $title, 'teacher_uid' => 990101, 'annee_scolaire' => $year, 'semestre' => 1,
+            'statut' => $status, 'cree_le' => '2026-10-01 09:00:00', 'modifie_le' => '2026-10-20 16:00:00',
+        ] + $extra);
+        $line = function (int $remise, string $student, array $values) use ($year) {
+            // La note du COURS de la remise (un étudiant inscrit à deux cours a deux lignes de notes).
+            $course = DB::table('t_remise_notes')->where('id', $remise)->value('cours_id');
+            $note = DB::table('t_2023_notes')->where('id_cours', (string) $course)->where('student_id', $student)->where('annee_scolaire', $year)->orderBy('id')->value('id');
+            DB::table('t_remise_notes_ligne')->insert(['remise_id' => $remise,'note_id' => $note, 'student_id' => $student, 'modifie_le' => '2026-10-20 16:00:00'] + $values);
+        };
+        $full = fn (array $v) => ['quiz' => $v[0], 'recherche' => $v[1], 'autres' => $v[2], 'mi_semestre' => $v[3], 'examen_final' => $v[4]];
+
+        $r1 = $remise($os, 'DEMO 301', 'Systèmes d’exploitation (démo)', 'brouillon');
+        $line($r1, 'DEMO-0101', $full([14, 12, 15, 11, 13]));
+        $line($r1, 'DEMO-0102', $full([16, 15, 14, 17, 18]));
+        $line($r1, 'DEMO-0103', $full([8, 9, 10, 7, 6]));
+        $line($r1, 'DEMO-0104', ['quiz' => 12, 'recherche' => 10]);            // incomplet
+        $line($r1, 'DEMO-0105', ['statut_special' => 'V']);                    // validé sans note
+        $line($r1, 'DEMO-0106', []);                                           // vierge
+
+        // DEMO 302 : colonnes LIBRES (3 colonnes aux titres et poids choisis par l'enseignant), renvoyée par le registrariat.
+        $r2 = $remise($os2, 'DEMO 302', 'Réseaux avancés (démo)', 'rejetee', [
+            'motif_rejet' => 'Le projet de DEMO-0102 semble trop élevé : vérifiez la copie, puis retransmettez.', 'soumis_le' => '2026-10-21 10:00:00', 'traite_le' => '2026-10-22 09:30:00',
+            'poids_quiz' => 30, 'poids_recherche' => 30, 'poids_autres' => 40, 'poids_mi_semestre' => 0, 'poids_final' => 0,   // copie historique des trois colonnes
+        ]);
+        foreach ([[1, 'Devoir 1', 30], [2, 'Projet', 30], [3, 'Examen', 40]] as [$slot, $label, $weight]) {
+            DB::table('t_remise_notes_composante')->insert(['remise_id' => $r2, 'slot' => $slot, 'position' => $slot, 'libelle' => $label, 'poids' => $weight]);
+        }
+        $free = [['DEMO-0101', [12, 14, 13]], ['DEMO-0102', [11, 20, 15]]];
+        foreach ($free as [$student, $notes]) {
+            $note = DB::table('t_2023_notes')->where('id_cours', (string) $os2)->where('student_id', $student)->where('annee_scolaire', $year)->orderBy('id')->value('id');   // la note du cours DEMO 302
+            $ligne =DB::table('t_remise_notes_ligne')->insertGetId(['remise_id' => $r2, 'note_id' => $note, 'student_id' => $student, 'modifie_le' => '2026-10-20 16:00:00', 'quiz' => $notes[0], 'recherche' => $notes[1], 'autres' => $notes[2]]);
+            foreach ($notes as $i => $value) {
+                DB::table('t_remise_notes_valeur')->insert(['ligne_id' => $ligne, 'slot' => $i + 1, 'valeur' => $value, 'modifie_le' => '2026-10-20 16:00:00']);
+            }
+        }
     }
 
     /**
      * Quiz : la banque de questions, et trois parties terminées de joueurs FICTIFS pour que le classement ne soit pas vide.
      * etudiant.demo n'a encore joué aucune partie : les tests de bout en bout en jouent une.
      */
+    /**
+     * Écrans du personnel (listes, tableau de bord, candidatures, création d'étudiant) : mentions, parcours, régions, fiches rattachées à une mention,
+     * et sept candidatures à tous les stades. Les étudiants créés par les tests de bout en bout (noms « Testcreation » et « Acceptee ») sont retirés à chaque passage.
+     */
+    private function staffData(): void
+    {
+        $created = DB::table('tbl_2024_etudiant')->whereIn('student_nom', ['Testcreation', 'Acceptee'])->pluck('student_id');
+        DB::table('t_etudiant_creation')->whereIn('student_id', $created)->delete();
+        DB::table('t_2024_bacc')->whereIn('student_id', $created)->delete();
+        DB::table('t_2024_diplome_preced')->whereIn('student_id', $created)->delete();
+        DB::table('tbl_2024_etudiant')->whereIn('student_nom', ['Testcreation', 'Acceptee'])->delete();
+        $oldApps = DB::table('candidat')->where('email', 'LIKE', '%@demo.test')->orWhere('nom_complet', 'LIKE', 'Demo %')->pluck('id');
+        DB::table('t_candidat_notification')->whereIn('candidat_id', $oldApps)->delete();
+        DB::table('candidat')->whereIn('id', $oldApps)->delete();
+
+        // Autorisation de réinscription : DEMO-0101 prêt (caisse ET dossier), DEMO-0102 attend le dossier, DEMO-0103 attend la caisse, les autres n'ont rien.
+        // Les lots de réinitialisation et l'historique d'une passe précédente sont effacés : chaque passage repart du même état (base de démonstration seulement).
+        DB::table('t_reinscription_reinitialisation')->delete();
+        DB::table('t_student_modification_history')->where('commentaire', 'LIKE', 'Réinitialisation globale%')->orWhere('commentaire', 'LIKE', 'Annulation de la réinitialisation%')->orWhere('commentaire', 'LIKE', 'Action groupée%')->delete();
+        DB::table('tbl_2024_etudiant')->update(['authorized_reinscription' => 0, 'authorized_by' => null, 'authorized_date' => null, 'dossier_ok' => 0, 'dossier_checked_by' => null, 'dossier_checked_date' => null]);
+        $cashier = DB::table('compt_utilisateur')->where('pseudo', 'ancien.demo')->value('id');
+        $registrar = DB::table('compt_utilisateur')->where('pseudo', 'registraire.demo')->value('id');
+        $when = now()->subDays(2)->format('Y-m-d H:i:s');
+        DB::table('tbl_2024_etudiant')->whereIn('student_id', ['DEMO-0101', 'DEMO-0102'])->update(['authorized_reinscription' => 1, 'authorized_by' => $cashier, 'authorized_date' => $when]);
+        DB::table('tbl_2024_etudiant')->whereIn('student_id', ['DEMO-0101', 'DEMO-0103'])->update(['dossier_ok' => 1, 'dossier_checked_by' => $registrar, 'dossier_checked_date' => $when]);
+
+        foreach ([['INFO', 'Informatique', 1], ['GEST', 'Gestion', 1], ['EDUC', 'Éducation', 0]] as $i => [$sigle, $label, $open]) {
+            DB::table('filiere')->updateOrInsert(['filiere_sigle' => $sigle], ['filiere_id' => 9001 + $i, 'filiere_description' => $label, 'filiere_description_ang' => '', 'domaine_signe' => '', 'domaine_name' => '', 'ouverte' => $open]);
+        }
+        foreach ([['I_RES', 'Réseaux', 'INFO', 'L,M'], ['I_DEV', 'Développement', 'INFO', 'L'], ['I_IA', 'Intelligence artificielle', 'INFO', 'M'], ['G_GEN', 'Gestion générale', 'GEST', 'L,M']] as [$code, $label, $mention, $cycles]) {
+            DB::table('filiere_parcours')->updateOrInsert(['shortcode' => $code], ['description' => $label, 'description_ang' => '', 'departement' => $mention, 'cycles' => $cycles]);
+        }
+        foreach (['Vakinankaratra', 'Analamanga'] as $region) {
+            DB::table('region')->updateOrInsert(['region' => $region], ['chefLieu' => '', 'province' => '']);
+        }
+
+        // Les fiches de démonstration : une mention, un parcours, un niveau.
+        // Seulement les étudiants des cours de l'enseignant de démonstration (DEMO-01xx) : les quatre comptes étudiants (DEMO-0001 à 0004) gardent leur fiche telle
+        // que les écrans de l'espace étudiant la lisent.
+        DB::table('tbl_2024_etudiant')->where('student_id', 'LIKE', 'DEMO-01%')->update(['etude_envisage' => 'Informatique', 'etude_option' => 'Réseaux', 'annee_etude' => '2', 'annee_scolaire' => '2026 - 2027', 'new_student' => 0]);
+        DB::table('tbl_2024_etudiant')->whereIn('student_id', ['DEMO-0105', 'DEMO-0106'])->update(['etude_envisage' => 'Gestion', 'etude_option' => 'Gestion générale', 'annee_etude' => '1', 'new_student' => 1]);
+        // Seulement les cours de l'enseignant de démonstration : le catalogue « DEMO INF 210 » etc. (fiche d'inscription de l'étudiant) garde ses catégories.
+        DB::table('t_2023_cours')->whereIn('Sigle', ['DEMO 301', 'DEMO 302', 'DEMO 303', 'DEMO 304'])->update(['dep_desc' => 'INFO', 'nb_crd' => 3, 'category' => 1, 'semester' => 1, 'parcours' => 'I_RES']);
+
+        $app = fn (string $name, string $status, array $over = []) => DB::table('candidat')->insertGetId(array_merge([
+            'nom_complet' => $name, 'nom' => explode(' ', $name)[1] ?? $name, 'prenom' => explode(' ', $name)[2] ?? '', 'telephone' => '034 12 345 67', 'email' => strtolower(str_replace(' ', '.', $name)).'@demo.test',
+            'mention' => 'informatique', 'mention_libelle' => 'Informatique', 'diplome_vise' => 'licence', 'statut' => $status, 'genre' => 'F', 'etat_civil' => 'celibataire',
+            'nationalite' => 'Malagasy', 'pays_origine' => 'Madagascar', 'adresse' => 'Lot 12 Antsirabe', 'date_naissance' => '2005-03-12', 'lieu_naissance' => 'Antsirabe',
+            'parcours' => 'Réseaux', 'nom_pere' => 'Papa Demo', 'nom_mere' => 'Maman Demo', 'tuteur' => 'Oncle Demo', 'date_creation' => now()->subDays(3)->format('Y-m-d H:i:s'),
+        ], $over));
+        $app('Demo Nouvelle Candidate', 'nouveau');
+        $app('Demo Sansmoyen Contact', 'nouveau', ['email' => '', 'telephone' => '12']);
+        $app('Demo Encours Candidat', 'en_cours');
+        $app('Demo Acceptee Licence', 'accepte', ['genre' => 'M']);
+        $app('Demo Acceptee Master', 'accepte', ['diplome_vise' => 'master', 'genre' => 'M', 'date_naissance' => '1998-06-02']);
+        $app('Demo Refusee Candidate', 'refuse', ['date_traitement' => now()->subDay()->format('Y-m-d H:i:s'), 'traite_par' => 'Registraire Demo']);
+        $app('Demo Deja Converti', 'converti', ['student_id' => 'DEMO-0001', 'archive_le' => now()->subDay()->format('Y-m-d H:i:s'), 'archive_par' => 'Registraire Demo', 'date_traitement' => now()->subDay()->format('Y-m-d H:i:s')]);
+
+        $this->balances();
+    }
+
+    /**
+     * Solde de compte : une session « Soldes (démo) » (jamais la session active) avec cinq inscrits : une dette (DEMO-0101, solde 150 000), une avance
+     * (DEMO-0102, -25 000), un solde nul (DEMO-0103), un étudiant SANS ligne finance (DEMO-0104) et un solde calculé (DEMO-0105 : 500 000 dus, 200 000 versés).
+     * Le matricule « DEMO-0101 » est rapproché de la ligne finance 101 par sa partie numérique, comme l'ancienne page.
+     */
+    private function balances(): void
+    {
+        $old = DB::table('t_2023_session')->where('session_code', 'DEMO-SOLDES')->pluck('session_id');
+        DB::table('finance')->whereIn('session_id', $old)->delete();
+        DB::table('t_paiement_echeance')->whereIn('session_id', $old)->delete();
+        DB::table('t_2024_inscription_session')->whereIn('session_id', $old)->delete();
+        DB::table('t_2023_session')->where('session_code', 'DEMO-SOLDES')->delete();
+
+        $session = DB::table('t_2023_session')->insertGetId(['session_code' => 'DEMO-SOLDES', 'session_name' => 'Soldes (démo)', 'session_year' => '2026 - 2027', 'session_semester' => 1, 'selected' => 0, 'date_entry' => '2026-09-28', 'graduation_date' => '2027-02-12']);
+        foreach (['DEMO-0101', 'DEMO-0102', 'DEMO-0103', 'DEMO-0104', 'DEMO-0105'] as $id) {
+            DB::table('t_2024_inscription_session')->insert([
+                'student_id' => $id, 'session_id' => $session, 'niveau_std' => 2, 'etude_mention' => 'Informatique', 'abonment_std' => 0, 'adresse_actuel_std' => '', 'annee_scolaire' => '2026 - 2027',
+                'caisse_verification' => 0, 'conjoint_name' => '', 'cours_selected' => 0, 'data_completion' => 0, 'data_verification' => 0, 'date_entry' => '2026-09-01', 'depot_list' => 0,
+                'etat_civil_std' => '', 'graduated' => 0, 'mode_payement' => 0, 'nb_enfant' => 0, 'nbr_semester' => 0, 'new_student' => 0, 'parcours_std' => '', 'remove' => 0,
+                'sponsor_address' => '', 'sponsor_contact' => '', 'sponsor_lastName' => '', 'sponsor_name' => '', 'status' => '', 'test_niveau' => 0, 'verification_signatures' => 0,
+            ]);
+        }
+        $row = fn (int $id, ?string $balance, array $over = []) => DB::table('finance')->insert(array_merge(['student_id' => $id, 'session_id' => $session, 'total_payment' => '0', 'balance_amount' => $balance], $over));
+        $row(101, '150000.00');
+        $row(102, '-25000.00');
+        $row(103, '0.00');
+        $row(105, null, ['total_payment' => '500 000', 'amount_pay_1' => '150 000', 'amount_pay_2' => '50 000']);
+    }
+
     private function quiz(): void
     {
         $this->command?->callSilent('quiz:import-questions');

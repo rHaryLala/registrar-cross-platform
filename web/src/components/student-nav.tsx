@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpenCheck, CalendarCheck, Ellipsis, FileText, House, IdCard, Newspaper, Trophy } from "lucide-react";
+import { BookOpenCheck, CalendarCheck, Ellipsis, FileText, Gamepad2, House, IdCard, Newspaper, Trophy } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -16,13 +16,14 @@ const BAR: Item[] = [
   { href: "/notes/", label: "Notes", Icon: BookOpenCheck },
   { href: "/presence/", label: "Présence", Icon: CalendarCheck },
   { href: "/inscriptions/", label: "Inscriptions", Icon: FileText },
-  { href: "/plus/", label: "Plus", Icon: Ellipsis, owns: ["/actualites/", "/informations/", "/quiz/"] },
+  { href: "/plus/", label: "Plus", Icon: Ellipsis, owns: ["/actualites/", "/informations/", "/jeu/", "/quiz/"] },
 ];
 
 /** Pages rangées sous « Plus » : listées dans l'en-tête sur ordinateur, et sur la page /plus/ sur téléphone. */
 export const MORE_PAGES = [
   { href: "/actualites/", label: "Actualités", Icon: Newspaper, hint: "Les actualités du site de l’université et les annonces du registrariat." },
   { href: "/informations/", label: "Mes informations", Icon: IdCard, hint: "Votre fiche : identité, contact, études, famille, garant." },
+  { href: "/jeu/", label: "Jeu", Icon: Gamepad2, hint: "Le Rubik’s Cube : mélangez-le, résolvez-le et battez votre record." },
   { href: "/quiz/", label: "Quiz", Icon: Trophy, hint: "Testez vos connaissances et comparez-vous au classement." },
 ] as const;
 

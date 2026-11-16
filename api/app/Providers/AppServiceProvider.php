@@ -13,6 +13,9 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        // Un seul journal d'activité par requête : le domaine y déclare ce qu'il change, le contrôleur l'écrit.
+        $this->app->scoped(\App\Support\AuditTrail::class);
+
         $this->app->bind(
             GoogleTokenVerifier::class,
             fn () => new GoogleJwtVerifier((string) config('registrar.google_client_id')),
@@ -34,6 +37,9 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('login', fn (Request $request) => Limit::perMinutes(15, 10)->by(
             mb_strtolower((string) $request->input('identifier', 'google')).'|'.$request->ip()
         ));
+
+        // Espace enseignant : 600 écritures par minute et par compte (un appel de 150 étudiants rejoué d'un coup reste largement permis).
+        RateLimiter::for('teacher-write', fn (Request $request) => Limit::perMinute(600)->by('teacher|'.($request->user()?->id ?? $request->ip())));
 
         // Quiz : au plus 30 parties démarrées par heure et par compte.
         RateLimiter::for('quiz-start', fn (Request $request) => Limit::perHour(30)->by('quiz|'.($request->user()?->id ?? $request->ip())));

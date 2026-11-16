@@ -17,3 +17,37 @@ Ordre prudent :
 - `storage/app/dompdf` doit être inscriptible (cache des polices du PDF) ; extensions PHP : `gd` (réduction des photos), `exif` (redressement), `mbstring`, `dom`.
 - **Actualités synchronisées** : ajouter la tâche cron `* * * * * cd /var/www/registrar-api && php artisan schedule:run >> /dev/null 2>&1` (le planificateur lance `news:sync` toutes les 30 minutes) ; le serveur doit pouvoir joindre `https://zurcher.edu.mg` en sortie (HTTPS, port 443). Premier remplissage : `php artisan news:sync`. Supervision : `t_site_news_sync` (un statut `failed` répété = site injoignable ou gabarit changé).
 - Les tables `t_quiz_*` sont créées par `php artisan migrate` (ajout seulement) ; la banque de questions par `php artisan quiz:import-questions`.
+
+## Espace enseignant : hors ligne
+
+- **`/sw.js`** (service worker) doit être servi avec `Cache-Control: no-cache` (et jamais en cache longue durée) : c'est lui qui porte les mises à jour de l'application. Les fichiers `/_next/static/…` portent leur empreinte : cache long possible.
+- Le service worker ne copie **que** la coque de l'application ; il laisse passer `/api/…` sans rien garder. Si l'API est servie sur une AUTRE origine, rien à régler non plus (il ignore les autres origines).
+- Les écritures de présence passent par `PUT/POST/PATCH/DELETE /api/v1/teacher/…` (limite : 600 par minute et par compte, pour qu'une file hors ligne se rejoue en rafale). Chaque écriture ajoute des lignes au journal d'activité (`t_audit_*`).
+
+## Remise de notes : migration à appliquer
+
+`php artisan migrate --force` crée **deux tables nouvelles** (`t_remise_notes_composante`, `t_remise_notes_valeur`) ; aucune table existante n'est modifiée (l'ancien PHP continue de lire `t_remise_notes` et `t_remise_notes_ligne`). À faire AVANT d'ouvrir la remise de notes aux enseignants dans la nouvelle application. Les 5 premières colonnes d'une feuille sont recopiées dans les colonnes historiques à chaque écriture : l'ancienne validation du registrariat reste exacte jusqu'à 5 colonnes et refuse (total ≠ 100 %) au-delà, jamais une note fausse.
+
+## Validation des remises : migration et planificateur
+
+- `php artisan migrate --force` crée aussi `t_remise_validation_attente` (une ligne par validation en cours, supprimée dès qu'elle aboutit ou est annulée). Aucune table existante n'est modifiée.
+- La tâche cron `* * * * * cd /var/www/registrar-api && php artisan schedule:run` (déjà requise pour les actualités) lance chaque minute `remises:finalize-due` : elle termine les validations dont le délai d'annulation (10 s) est passé et dont l'onglet a été fermé. Sans elle, une validation n'aboutit que si l'écran qui l'a demandée reste ouvert.
+
+## Lot 4 (registrariat) : migrations, planificateur, courriel, SMS, Google
+
+- `php artisan migrate --force` crée **deux tables nouvelles** : `t_candidat_notification` (notifications aux candidats) et `t_etudiant_creation` (jeton anti-doublon et état du compte Google d'un étudiant créé). Aucune table existante n'est modifiée.
+- Le planificateur (même cron `* * * * * … php artisan schedule:run` que pour les actualités et les remises) lance deux commandes de plus, chaque minute : `applications:notify` (courriels et SMS aux candidats) et `students:google-accounts` (comptes Google). Sans le cron, **les décisions sont enregistrées mais aucun message ne part**.
+- **Courriel** : `MAIL_MAILER=smtp` et `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS` (reprendre les réglages SMTP de l'ancienne application, `data/config.local.php`). Avec `MAIL_MAILER=log` (défaut du développement) rien ne part, les messages sont écrits dans le journal.
+- **SMS** : `SMS_PROVIDER=journal` (défaut) n'envoie RIEN et écrit `storage/logs/sms.log` ; pour envoyer, `SMS_PROVIDER=twilio` avec `TWILIO_SID`, `TWILIO_TOKEN`, `TWILIO_FROM`. Le fournisseur « passerelle » de l'ancien code n'est pas repris.
+- **Google Admin** (comptes des étudiants) : `GOOGLE_ADMIN_KEY` = chemin de la clé JSON du compte de service (déjà utilisée par l'ancienne application : `data/prive/google-admin.json`, **hors dépôt**, lisible par l'utilisateur PHP), `GOOGLE_ADMIN_SUBJECT` (administrateur emprunté, `it@zurcher.edu.mg` par défaut), `GOOGLE_ADMIN_DOMAIN`. Sortie HTTPS vers `oauth2.googleapis.com` et `admin.googleapis.com`. Sans clé : aucun compte n'est créé, la fiche le dit.
+- Le cache applicatif sert au jeton Google (une heure) : le pilote de cache par défaut convient.
+
+## Lot 5 (finance) : autorisation de réinscription
+
+- **Aucune migration.** L'écran lit et écrit `tbl_2024_etudiant` (drapeaux `authorized_reinscription`, `dossier_ok` et leurs auteurs/dates), `t_student_modification_history` et `t_reinscription_reinitialisation` : trois tables de l'ancienne application. **Vérifier avant la mise en ligne** que `t_reinscription_reinitialisation` existe en production (`data/migration_reinscription_reinitialisation.sql` de l'ancien dépôt, rejouable) : sans elle la réinitialisation globale est refusée (409), le reste fonctionne.
+- Pas de tâche planifiée, pas de réglage nouveau. Le journal d'activité reçoit une ligne par bascule, par action groupée, par réinitialisation et par annulation (les mêmes tables `t_audit_*` que l'ancienne application).
+
+### Soldes de compte
+
+- **Aucune migration** (table `finance` de l'ancienne application). Vérifier que la colonne `finance.balance_amount` existe en production (`data/sql_finance_balance_amount.sql` de l'ancien dépôt) : sans elle les soldes sont calculés (total − versements) et la correction est refusée (409).
+- Accès niveaux 1 à 4 : la comptabilité y a accès (l'ancienne page s'arrêtait au niveau 3).

@@ -7,8 +7,8 @@
  * Pilote Chrome par le protocole DevTools (aucune dépendance à installer). Retourne un code de sortie non nul
  * si une vérification échoue.
  */
-import { spawn } from "node:child_process";
-import { mkdtempSync, writeFileSync, mkdirSync, existsSync, readFileSync, statSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { mkdtempSync, writeFileSync, mkdirSync, existsSync, readFileSync, statSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -19,6 +19,14 @@ const PASSWORD = process.env.DEMO_PASSWORD ?? "mot-de-passe-test";
 mkdirSync(OUT, { recursive: true });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Refus réseau local intermittent de Windows (EACCES sur localhost) : un fetch de ce script qui échoue AVANT d'avoir atteint le serveur est rejoué
+// (6 essais). Une réponse HTTP, même d'erreur, n'est jamais rejouée : un vrai défaut de l'application reste visible.
+const nativeFetch = globalThis.fetch.bind(globalThis);
+globalThis.fetch = async (...args) => {
+  for (let attempt = 1; ; attempt++) {
+    try { return await nativeFetch(...args); } catch (e) { if (attempt >= 6) throw e; envBlips++; await sleep(500 * attempt); }
+  }
+};
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok: Boolean(ok), detail });
@@ -26,7 +34,7 @@ const check = (name, ok, detail = "") => {
 };
 
 // Chien de garde : un test qui se bloque doit échouer bruyamment, pas attendre indéfiniment.
-const watchdog = setTimeout(() => { console.log("  ECHEC  Le test a dépassé 6 minutes (blocage)."); process.exit(2); }, 360000);
+const watchdog = setTimeout(() => { console.log("  ECHEC  Le test a dépassé 15 minutes (blocage)."); process.exit(2); }, 900000);
 watchdog.unref?.();
 
 const profile = mkdtempSync(join(tmpdir(), "registrar-e2e-profile-"));
@@ -69,9 +77,15 @@ ws.onmessage = (m) => {
 };
 const send = (method, params = {}) => new Promise((r) => { const i = ++id; pending.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
 const withTimeout = (promise, ms, label) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error(`Délai dépassé (${ms} ms) : ${label}`)), ms))]);
-const ev = async (expression) => {
-  const r = await withTimeout(send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true }), 15000, expression.slice(0, 60));
-  if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? "évaluation en échec");
+const ev = async (expression, attempt = 1) => {
+  const r = await withTimeout(send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true }), 45000, expression.slice(0, 60));
+  if (r.exceptionDetails) {
+    const description = r.exceptionDetails.exception?.description ?? "évaluation en échec";
+    // Un fetch lancé DANS la page qui n'a pas atteint le serveur (« Failed to fetch » = refus réseau local de Windows, compté comme tel) est rejoué ;
+    // une réponse HTTP, même d'erreur, ne l'est jamais.
+    if (/TypeError: Failed to fetch/.test(description) && attempt < 3) { envBlips++; await sleep(500 * attempt); return ev(expression, attempt + 1); }
+    throw new Error(description);
+  }
   return r.result?.value;
 };
 const until = async (expr, label, ms = 15000) => {
@@ -349,6 +363,8 @@ const lay6 = JSON.parse(await ev(`JSON.stringify({ scroll: document.documentElem
 check("fiche : aucun défilement horizontal, un seul h1, cibles ≥ 44 px, contrôles nommés", lay6.scroll <= lay6.inner && lay6.h1 === 1 && lay6.petits.length === 0 && lay6.sansNom === 0, JSON.stringify(lay6));
 await shot("03g-fiche-sombre");
 
+// Chrome n'écrase pas un fichier existant (il en crée un « (1) ») : on retire celui d'une exécution précédente, sinon on relirait l'ancien.
+rmSync(join(OUT, "DEMO-0001-fiche-inscription-Session-1-2026-2027.pdf"), { force: true });
 await ev("[...document.querySelectorAll('main button')].find(b => /Télécharger le PDF/.test(b.innerText)).click()");
 check("le PDF se télécharge (message de confirmation avec le nom du fichier)", await until("/PDF téléchargé : DEMO-0001-fiche-inscription-Session-1-2026-2027\\.pdf/.test(document.body.innerText)", "téléchargement", 30000));
 await sleep(800);
@@ -528,8 +544,91 @@ await go("/actualites/detail/?id=99999999");
 check("annonce inconnue : « Annonce introuvable »", await until("/Annonce introuvable/.test(document.body.innerText)", "annonce inconnue"));
 await go("/actualites/detail/?id=abc");
 check("paramètre non numérique : « Annonce introuvable » sans appeler l'API", await until("/Annonce introuvable/.test(document.body.innerText)", "annonce non numérique"));
-const leak = JSON.parse(await ev(`(async () => { const list = (await (await fetch('http://localhost:8000/api/v1/me/news', { credentials: 'include' })).json()).data.items.map(i => i.id); const max = Math.max(...list); const out = { visibles: list.length, caches: 0, fuites: [] }; for (let id = 1; id <= max + 3; id++) { if (list.includes(id)) continue; const r = await fetch('http://localhost:8000/api/v1/me/news/' + id, { credentials: 'include', headers: { Accept: 'application/json' } }); const im = await fetch('http://localhost:8000/api/v1/me/news/' + id + '/image', { credentials: 'include', headers: { Accept: 'application/json' } }); out.caches++; if (r.status !== 404 || im.status !== 404) out.fuites.push(id); } return JSON.stringify(out); })()`));
+const leak = JSON.parse(await ev(`(async () => { const list = (await (await fetch('http://localhost:8000/api/v1/me/news', { credentials: 'include' })).json()).data.items.map(i => i.id); const max = Math.max(...list); const out = { visibles: list.length, caches: 0, fuites: [] }; for (let id = Math.max(1, max - 12); id <= max + 3; id++) { if (list.includes(id)) continue; const r = await fetch('http://localhost:8000/api/v1/me/news/' + id, { credentials: 'include', headers: { Accept: 'application/json' } }); const im = await fetch('http://localhost:8000/api/v1/me/news/' + id + '/image', { credentials: 'include', headers: { Accept: 'application/json' } }); out.caches++; if (r.status !== 404 || im.status !== 404) out.fuites.push(id); } return JSON.stringify(out); })()`));
 check("aucune annonce masquée (programmée, expirée, désactivée) n'est lisible ni par son identifiant ni par son image", leak.fuites.length === 0 && leak.caches >= 3 && leak.visibles === 4, JSON.stringify(leak));
+await go("/");
+console.log(String.fromCharCode(10) + "3h. Jeu : Rubik's Cube");
+await go("/plus/");
+await until("/Jeu/.test(document.body.innerText)", "menu Plus (jeu)");
+check("le menu « Plus » propose le Jeu avec son explication", /Le Rubik’s Cube : mélangez-le, résolvez-le/.test(await text()));
+await click("a[href='/jeu/']");
+check("« Plus » ouvre le jeu", await until("location.pathname === '/jeu/'", "navigation jeu"), await path());
+await until("document.querySelectorAll('[data-sticker]').length === 54", "54 stickers", 20000);
+await sleep(500);
+const rk = async () => JSON.parse(await ev(`JSON.stringify({ stats: [...document.querySelectorAll('main dd')].map(d => d.textContent.trim()), status: document.querySelector('main [role=status]')?.innerText.trim() })`));
+const r0 = await rk();
+check("cube résolu au départ : 54 stickers, 0 mouvement, 00:00, record « --:-- »", (await ev("document.querySelectorAll('[data-sticker]').length")) === 54 && r0.stats.join("|") === "0|00:00|--:--" && /Cube résolu/.test(r0.status), JSON.stringify(r0));
+check("l'onglet « Plus » reste allumé sur le jeu", (await ev("document.querySelector('nav.fixed a[aria-current=page]')?.textContent.trim()")) === "Plus");
+await shot("03l-jeu-resolu-sombre");
+
+await ev("[...document.querySelectorAll('main button')].find(b => /Mélanger/.test(b.innerText)).click()");
+await until("/Cube mélangé/.test(document.body.innerText)", "mélange");
+const scr = await ev("document.querySelector('[data-testid=scramble]')?.textContent.trim() ?? ''");
+const scrMoves = scr.split(/\s+/).filter(Boolean);
+check("mélange de 25 quarts de tour, en notation standard, sans deux fois la même face de suite", scrMoves.length === 25 && scrMoves.every((m) => /^[UDLRFB]'?$/.test(m)) && scrMoves.every((m, i) => i === 0 || m[0] !== scrMoves[i - 1][0]), scr.slice(0, 60));
+const r1 = await rk();
+check("après le mélange : 0 mouvement, chrono à 00:00 (il démarre au premier mouvement)", r1.stats[0] === "0" && r1.stats[1] === "00:00" && /Cube mélangé/.test(r1.status), JSON.stringify(r1));
+await shot("03m-jeu-melange-sombre");
+
+// Résolution RÉELLE : on rejoue l'inverse du mélange, au clavier (Maj = sens inverse).
+const key = async (face, inverse) => {
+  const mods = inverse ? 8 : 0;
+  const k = inverse ? face : face.toLowerCase();
+  await send("Input.dispatchKeyEvent", { type: "keyDown", key: k, code: "Key" + face, text: k, modifiers: mods, windowsVirtualKeyCode: face.charCodeAt(0) });
+  await send("Input.dispatchKeyEvent", { type: "keyUp", key: k, code: "Key" + face, modifiers: mods, windowsVirtualKeyCode: face.charCodeAt(0) });
+};
+const inverseSeq = [...scrMoves].reverse().map((m) => ({ face: m[0], inverse: !m.endsWith("'") }));
+await key(inverseSeq[0].face, inverseSeq[0].inverse);
+await until("document.querySelector('main dd')?.textContent.trim() === '1'", "premier mouvement");
+check("le premier mouvement (au clavier) compte pour 1 et lance le chrono", (await rk()).stats[0] === "1");
+await sleep(1300);
+check("le chrono avance", (await rk()).stats[1] !== "00:00", JSON.stringify(await rk()));
+for (const m of inverseSeq.slice(1)) { await key(m.face, m.inverse); await sleep(60); }
+const won = await until("/Bravo ! Résolu en/.test(document.body.innerText)", "victoire", 30000);
+const rw = await rk();
+check("cube résolu en rejouant l'inverse du mélange : « Bravo ! Résolu en … avec 25 mouvements »", won && /avec 25 mouvements/.test(rw.status) && rw.stats[0] === "25", JSON.stringify(rw));
+check("le temps du record est enregistré et affiché (premier record = « Nouveau record »)", /Nouveau record/.test(rw.status) && /^\d\d:\d\d$/.test(rw.stats[2]) && rw.stats[2] !== "--:--", JSON.stringify(rw.stats));
+const stored = await ev("window.localStorage.getItem('registrar:rubik:best')");
+check("le record est gardé dans le navigateur (en millisecondes, valeur raisonnable)", Number(stored) > 500 && Number(stored) < 120000, String(stored));
+check("« Annuler » est désactivé après la victoire", await ev("[...document.querySelectorAll('main button')].find(b => /Annuler/.test(b.innerText)).disabled"));
+await shot("03n-jeu-victoire-sombre");
+
+// Annuler, boutons de faces, forme pour daltoniens
+await ev("[...document.querySelectorAll('main button')].find(b => /Réinitialiser/.test(b.innerText)).click()");
+await until("/Cube résolu/.test(document.body.innerText)", "réinitialisation");
+check("« Réinitialiser » remet le cube résolu, à zéro, en gardant le record", (await rk()).stats[0] === "0" && (await rk()).stats[2] !== "--:--" && /Cube résolu/.test((await rk()).status));
+await ev("document.querySelector('button[aria-label=\"Face droite, sens horaire\"]').click()");
+await until("document.querySelector('main dd')?.textContent.trim() === '1'", "bouton de face");
+check("un bouton de face tourne la face (1 mouvement), nommé pour les lecteurs d'écran", (await rk()).stats[0] === "1" && (await ev("!!document.querySelector('button[aria-label=\"Face haut, sens inverse\"]')")));
+await ev("[...document.querySelectorAll('main button')].find(b => /Annuler/.test(b.innerText)).click()");
+await until("document.querySelector('main dd')?.textContent.trim() === '0'", "annulation");
+check("« Annuler » reprend le dernier mouvement (retour à 0) puis se désactive", (await rk()).stats[0] === "0" && (await ev("[...document.querySelectorAll('main button')].find(b => /Annuler/.test(b.innerText)).disabled")));
+await ev("document.querySelector('button[aria-pressed]').click()");
+await sleep(300);
+check("le bouton daltonisme ajoute une forme sur CHAQUE sticker (54), pas seulement une couleur", (await ev("[...document.querySelectorAll('[data-sticker] > div')].filter(d => d.textContent.trim() !== '').length")) === 54);
+await ev("document.querySelector('button[aria-pressed]').click()");
+
+// Glisser à la souris : une face, puis le fond (orbite)
+const target = JSON.parse(await ev(`(() => { const st = document.querySelector('main [role=group][aria-label^="Rubik"]').getBoundingClientRect(); const el = document.elementFromPoint(st.left + st.width / 2, st.top + st.height / 2); const s = el?.closest('[data-sticker]'); return JSON.stringify(s ? { x: st.left + st.width / 2, y: st.top + st.height / 2, ok: true, left: st.left, top: st.top } : { ok: false }); })()`));
+check("le centre de la scène tombe sur une face du cube (glissé possible)", target.ok);
+const mouse = (type, x, y, buttons) => send("Input.dispatchMouseEvent", { type, x, y, button: "left", buttons, clickCount: 1, pointerType: "mouse" });
+await mouse("mousePressed", target.x + 30, target.y - 30, 1);
+for (let i = 1; i <= 8; i++) { await mouse("mouseMoved", target.x + 30 + i * 9, target.y - 30, 1); await sleep(20); }
+await mouse("mouseReleased", target.x + 30 + 72, target.y - 30, 0);
+await sleep(600);
+const afterDrag = await rk();
+check("glisser sur une face la pivote (un glissé = un quart de tour)", afterDrag.stats[0] === "1", JSON.stringify(afterDrag.stats));
+const pivotBefore = await ev("[...document.querySelectorAll('main [role=group] div')].find(d => /rotateX\\(/.test(d.style.transform) && d.style.transformStyle === 'preserve-3d' && !/matrix3d/.test(d.style.transform))?.style.transform");
+await mouse("mousePressed", target.left + 8, target.top + 8, 1);
+for (let i = 1; i <= 6; i++) { await mouse("mouseMoved", target.left + 8 + i * 12, target.top + 8 + i * 4, 1); await sleep(20); }
+await mouse("mouseReleased", target.left + 80, target.top + 32, 0);
+await sleep(300);
+const pivotAfter = await ev("[...document.querySelectorAll('main [role=group] div')].find(d => /rotateX\\(/.test(d.style.transform) && d.style.transformStyle === 'preserve-3d' && !/matrix3d/.test(d.style.transform))?.style.transform");
+check("glisser sur le fond tourne la vue (sans toucher au cube : toujours 1 mouvement)", pivotBefore && pivotAfter && pivotBefore !== pivotAfter && (await rk()).stats[0] === "1", `${pivotBefore} → ${pivotAfter}`);
+const layG = JSON.parse(await ev(`JSON.stringify({ scroll: document.documentElement.scrollWidth, inner: innerWidth, h1: document.querySelectorAll('h1').length, petits: [...document.querySelectorAll('main button, main summary, main a')].filter(e => e.getBoundingClientRect().width > 1 && Math.min(e.getBoundingClientRect().height, e.getBoundingClientRect().width) < 44).map(e => (e.getAttribute('aria-label') || e.innerText).trim().slice(0, 24)), sansNom: [...document.querySelectorAll('a,button,summary')].filter(e => !(e.getAttribute('aria-label') || e.innerText.trim())).length, stage: Math.round(document.querySelector('main [role=group][aria-label^="Rubik"]').getBoundingClientRect().width) })`));
+check("Jeu : aucun défilement horizontal, un seul h1, cibles ≥ 44 px, contrôles nommés", layG.scroll <= layG.inner && layG.h1 === 1 && layG.petits.length === 0 && layG.sansNom === 0, JSON.stringify(layG));
+check("la zone du cube est « touch-action: none » (le glissé ne fait pas défiler la page) et nommée", (await ev("getComputedStyle(document.querySelector('main [role=group][aria-label^=\"Rubik\"]')).touchAction")) === "none" && /Glissez sur le fond/.test(await ev("document.querySelector('main [role=group][aria-label^=\"Rubik\"]').getAttribute('aria-label')")));
+await shot("03o-jeu-apres-glisse-sombre");
 await go("/");
 console.log("\n4. Session et mise en page");
 await go(await path()); // rechargement : chargement direct de la même adresse (avec relance si le réseau local refuse)
@@ -624,8 +723,1390 @@ await go("/informations/");
 check("un compte du personnel sur « /informations/ » : explication claire, aucune donnée", await until("/réservée aux étudiants/.test(document.body.innerText)", "autre rôle informations") && !/Fanja|RAKOTO|CIN/.test(await text()));
 await go("/actualites/");
 check("un compte du personnel sur « /actualites/ » : explication claire, aucune annonce", await until("/réservée aux étudiants/.test(document.body.innerText)", "autre rôle actualités") && !/Réunion d’accueil/.test(await text()));
+await go("/jeu/");
+check("un compte du personnel sur « /jeu/ » : explication claire, pas de jeu", await until("/réservée aux étudiants/.test(document.body.innerText)", "autre rôle jeu") && (await ev("document.querySelectorAll('[data-sticker]').length")) === 0);
 await go("/quiz/");
 check("un compte du personnel sur « /quiz/ » : explication claire, pas de classement", await until("/réservée aux étudiants/.test(document.body.innerText)", "autre rôle quiz") && !/Tojo A\./.test(await text()));
+
+console.log(String.fromCharCode(10) + "7b. Enseignant : registres de présence (en ligne puis hors ligne)");
+{
+  const API = "http://localhost:8000";
+  /** Un second client, côté Node, avec sa propre session : joue « un autre appareil » qui modifie le serveur pendant que l'enseignant est hors ligne. */
+  const apiAs = async (pseudo, password) => {
+    const jar = {};
+    const take = (res) => { for (const c of res.headers.getSetCookie?.() ?? []) { const [kv] = c.split(";"); const i = kv.indexOf("="); jar[kv.slice(0, i)] = kv.slice(i + 1); } };
+    const base = { Origin: WEB, Referer: WEB + "/", Accept: "application/json" };
+    take(await fetch(API + "/api/v1/auth/csrf", { headers: base }));
+    const call = async (method, p, body) => {
+      const res = await fetch(API + p, { method, headers: { ...base, "Content-Type": "application/json", Cookie: Object.entries(jar).map(([k, v]) => `${k}=${v}`).join("; "), "X-XSRF-TOKEN": decodeURIComponent(jar["XSRF-TOKEN"] ?? "") }, body: body ? JSON.stringify(body) : undefined });
+      take(res);
+      return { status: res.status, json: await res.json().catch(() => null) };
+    };
+    await call("POST", "/api/v1/auth/login", { identifier: pseudo, password });
+    return call;
+  };
+  /** Dans la page : le même fetch que l'application (cookies de session), pour lire l'état réel du serveur. */
+  const pageApi = (p) => ev(`fetch('${API}${p}', { credentials: 'include', headers: { Accept: 'application/json' } }).then(async r => JSON.stringify({ s: r.status, d: (await r.json()).data }))`).then(JSON.parse);
+  /** Attend (jusqu'à 8 s) que l'état serveur lu par `read` satisfasse `ok` : l'écriture part après un contrôle CORS, elle n'est pas instantanée. */
+  const serverState = async (read, ok) => { let last; for (let i = 0; i < 40; i++) { last = await read(); if (ok(last)) return last; await sleep(200); } return last; };
+  const setValue = (sel, v) => ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(e, ${JSON.stringify(v)}); e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  const clickText = (scopeSel, label) => ev(`(() => { const b = [...document.querySelector(${JSON.stringify(scopeSel)}).querySelectorAll('button')].find(x => x.innerText.trim() === ${JSON.stringify(label)}); if (!b) return false; b.click(); return true; })()`);
+  /** Le bouton des changements en attente : sur téléphone il n'affiche que le nombre, son texte complet est son nom accessible. */
+  const PENDING = "(document.querySelector('header button[aria-label*=\"changement\"], header button[aria-label*=\"Envoi\"]')?.getAttribute('aria-label') ?? '')";
+  const rowText = (id) => ev(`document.querySelector('[data-line="${id}"]')?.innerText ?? ''`);
+  /** Une commande DevTools sur une autre cible (le service worker a sa propre connexion réseau, à couper aussi). */
+  const cdpOn = (wsUrl, method, params) => new Promise((resolve) => { const w = new WebSocket(wsUrl); w.onopen = () => { w.send(JSON.stringify({ id: 1, method: "Network.enable" })); w.send(JSON.stringify({ id: 2, method, params })); }; w.onmessage = (m) => { if (JSON.parse(m.data).id === 2) { w.close(); resolve(); } }; w.onerror = () => resolve(); setTimeout(resolve, 3000); });
+  const setOffline = async (off) => {
+    scriptsOff = off; // les requêtes qui échouent pendant la coupure sont voulues : elles ne comptent pas comme des défauts
+    const conditions = { offline: off, latency: 0, downloadThroughput: -1, uploadThroughput: -1 };
+    await send("Network.emulateNetworkConditions", conditions);
+    const targets = await (await fetch("http://127.0.0.1:9340/json")).json();
+    for (const t of targets.filter((x) => x.type === "service_worker")) await cdpOn(t.webSocketDebuggerUrl, "Network.emulateNetworkConditions", conditions);
+    if (!off) await ev("window.dispatchEvent(new Event('online'))");
+  };
+  const localDay = (ms = Date.now()) => { const d = new Date(ms); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+  const today = localDay();
+
+  await logoutNow();
+  await go("/login/");
+  await type("#identifier", "enseignant.demo");
+  await type("#password", PASSWORD);
+  await submit();
+  check("l'enseignant arrive sur son accueil, avec « Présence »", await until("location.pathname === '/' && /Bonjour Hasina/.test(document.body.innerText) && /Présence/.test(document.body.innerText)", "accueil enseignant"), await path());
+  const tNav = await ev("[...document.querySelectorAll('nav.fixed a')].map(a => a.textContent.trim())");
+  check("la barre du bas de l'enseignant n'a que des entrées qui existent : aucun lien mort", JSON.stringify(tNav) === JSON.stringify(["Accueil", "Présence", "Notes"]), JSON.stringify(tNav));
+  check("l'accueil propose la « Remise de notes » (lien vers /notes/)", /Remise de notes/.test(await text()) && (await ev("[...document.querySelectorAll('a')].some(a => /Remise de notes/.test(a.innerText) && a.getAttribute('href') === '/notes/')")));
+  await shot("07b-enseignant-accueil");
+
+  // --- liste des cours
+  await click("a[href='/presence/']");
+  await until("/Systèmes d’exploitation/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "liste des cours");
+  await sleep(500);
+  const courses = await text();
+  check("mes cours : les deux de l'enseignant, avec étudiants, séances tenues / prévues et alerte 15 %", /DEMO 301/.test(courses) && /DEMO 302/.test(courses) && /6 étudiants/.test(courses) && /2 étudiants/.test(courses) && /3 \/ 10 séances/.test(courses) && /1 étudiant au-delà de 15 %/.test(courses), courses.slice(0, 160).replace(/\n/g, " "));
+  check("le cours d'un AUTRE enseignant n'apparaît pas", !/DEMO 303|autre enseignant/.test(courses));
+  await shot("07c-enseignant-cours");
+  const href301 = await ev("[...document.querySelectorAll('a[href*=\"/presence/registre/\"]')].find(a => /DEMO 301/.test(a.innerText)).getAttribute('href')");
+  const id301 = Number(new URL(href301, WEB).searchParams.get("cours"));
+
+  // --- isolation : un cours d'autrui est « introuvable », indiscernable d'un cours inexistant
+  const foreign = await pageApi(`/api/v1/teacher/courses/${id301 + 2}/register?year=${encodeURIComponent("2026 - 2027")}&semester=1`);
+  const missing = await pageApi(`/api/v1/teacher/courses/987654/register?year=${encodeURIComponent("2026 - 2027")}&semester=1`);
+  check("un cours d'un autre enseignant : 404, exactement comme un cours inexistant (rien ne fuit)", foreign.s === 404 && missing.s === 404, `${foreign.s}/${missing.s}`);
+
+  // --- registre
+  await click(`a[href='${href301}']`);
+  await until("location.pathname === '/presence/registre/' && /Base des 15 %/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "registre");
+  await sleep(600);
+  const reg = await text();
+  check("registre : base des 15 % pré-remplie (10 séances = 1 absence permise)", (await ev("document.querySelector('#planned').value")) === "10" && /1 absence permise ; la 2e fait dépasser 15 %/.test(reg), "");
+  check("registre : 3 séances tenues, la plus récente d'abord", /Séances tenues \(3 sur 10 prévues\)/.test(reg) && reg.indexOf("21 septembre") < reg.indexOf("14 septembre") && reg.indexOf("14 septembre") < reg.indexOf("7 septembre"));
+  check("registre : alerte « 1 étudiant dépasse 15 % » (déjà signalé au registrariat)", /1 étudiant dépasse 15 % d’absences/.test(reg) && /Signalé au registrariat le 14\/09\/2026/.test(reg));
+  const bilan = await ev("JSON.stringify([...document.querySelectorAll('section[aria-labelledby=bilan] li')].map(li => li.innerText.replace(/\\s+/g, ' ')))");
+  check("bilan : le plus absent est au-delà de 15 %, le suivant à la limite", /Andrianina Lalaina.*Au-delà de 15 %/.test(JSON.parse(bilan)[0]) && /Bezara Mirana.*À la limite des 15 %/.test(JSON.parse(bilan)[1]), JSON.parse(bilan)[0]?.slice(0, 120));
+  await shot("07d-enseignant-registre");
+
+  // --- nouvelle séance (aujourd'hui) et appel
+  check("la date proposée est celle du jour, et ne peut pas être dans le futur", (await ev("document.querySelector('#date').value")) === today && (await ev("document.querySelector('#date').max")) === today);
+  // Heures FIXES : l'arrivée proposée est l'heure actuelle, qui dépend du moment où le test tourne (avant 10 h du matin, « 10:00 » serait dans le futur).
+  await setValue("#planned-time", "00:00");
+  await setValue("#arrival", "12:00");
+  check("§474 annoncé AVANT d'ouvrir : « Votre arrivée » (heure actuelle) très en retard sur le début prévu → avertissement", await until("/sans pénalité pour les étudiants/.test(document.querySelector('[role=status]')?.innerText ?? '')", "avertissement §474"));
+  await setValue("#arrival", "00:05");
+  check("l'avertissement disparaît quand l'arrivée est à l'heure", await until("!/sans pénalité pour les étudiants/.test(document.body.innerText)", "avertissement retiré"));
+  await ev("[...document.querySelectorAll('button')].find(b => /Faire l’appel/.test(b.innerText)).click()");
+  check("« Faire l'appel » ouvre la séance : liste d'appel des 6 inscrits, personne pointé", await until("location.pathname === '/presence/appel/' && document.querySelectorAll('[data-line]').length === 6 && /0 \\/ 6 pointés/.test(document.body.innerText)", "appel"), await path());
+  const sid = Number(new URL(await ev("location.href")).searchParams.get("seance"));
+  check("la séance a un vrai identifiant serveur", sid > 0, String(sid));
+  await shot("07e-appel-vide");
+
+  await ev("[...document.querySelectorAll('button')].find(b => /Tous présents/.test(b.innerText)).click()");
+  check("« Tous présents » pointe les 6 d'un coup", await until("/6 \\/ 6 pointés/.test(document.body.innerText)", "tous présents"));
+
+  await clickText("[data-line='DEMO-0102']", "Absent");
+  check("un 2e absent pour DEMO-0102 : « Absent », et le bilan du serveur le met au-delà de 15 %", await until("/Absent/.test(document.querySelector('[data-line=\"DEMO-0102\"]')?.innerText ?? '') && /Au-delà de 15 %/.test(document.querySelector('[data-line=\"DEMO-0102\"]')?.innerText ?? '')", "bilan 0102"), (await rowText("DEMO-0102")).replace(/\n/g, " ").slice(0, 100));
+  check("le franchissement des 15 % est annoncé à l'enseignant", /dépasse 15 % d’absences/.test(await ev("document.querySelector('[data-sonner-toaster]')?.innerText ?? ''")));
+  const sig = await pageApi(`/api/v1/teacher/courses/${id301}/register?year=${encodeURIComponent("2026 - 2027")}&semester=1`);
+  const s0102 = sig.d.students.find((s) => s.id === "DEMO-0102");
+  check("le signalement au registrariat est enregistré par le serveur (une seule fois)", Boolean(s0102.flagged_at) && s0102.summary.state === "exceeded" && sig.d.exceeded === 2, JSON.stringify({ f: s0102.flagged_at, e: sig.d.exceeded }));
+
+  await clickText("[data-line='DEMO-0103']", "Retard");
+  await until("!!document.querySelector('#min-DEMO-0103')", "durée du retard");
+  check("un retard sans durée compte pour 5 minutes", /Retard 5 min/.test(await rowText("DEMO-0103")));
+  await type("#min-DEMO-0103", "12");
+  await ev("document.querySelector('#min-DEMO-0103').blur()");
+  check("12 minutes de retard comptent comme une absence (la durée décide, pas le bouton)", await until("/Retard 12 min \\(compte absence\\)/.test(document.querySelector('[data-line=\"DEMO-0103\"]')?.innerText ?? '')", "retard 12"), (await rowText("DEMO-0103")).replace(/\n/g, " ").slice(0, 100));
+  await ev("(() => { const s = document.querySelector('#just-DEMO-0102'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, 'medical'); s.dispatchEvent(new Event('change', { bubbles: true })); })()");
+  const line0102 = await serverState(async () => (await pageApi(`/api/v1/teacher/sessions/${sid}`)).d.lines.find((l) => l.student_id === "DEMO-0102"), (l) => l.justification === "medical");
+  check("le justificatif est enregistré sans changer le pointage", line0102.justification === "medical" && line0102.status === "absent", JSON.stringify([line0102.justification, line0102.status]));
+
+  // appuyer de nouveau sur le bouton actif efface le pointage ; on remet ensuite « Présent »
+  await clickText("[data-line='DEMO-0104']", "Présent");
+  check("appuyer sur le bouton actif efface le pointage (« Non pointé »)", await until("/Non pointé/.test(document.querySelector('[data-line=\"DEMO-0104\"]')?.innerText ?? '') && /5 \\/ 6 pointés/.test(document.body.innerText)", "effacer"));
+  await clickText("[data-line='DEMO-0104']", "Présent");
+  await until("/6 \\/ 6 pointés/.test(document.body.innerText)", "re-pointé");
+
+  // §474 : l'enseignant arrive 30 minutes en retard sans prévenir
+  await ev("document.querySelector('details summary').click()");
+  await until("!!document.querySelector('#s-arrival')", "réglages");
+  await setValue("#s-arrival", "00:30");
+  await ev("[...document.querySelectorAll('button')].find(b => /Enregistrer la séance/.test(b.innerText)).click()");
+  check("§474 : 30 minutes de retard de l'enseignant sans message → « sans pénalité » annoncé", await until("/Sans pénalité pour les étudiants : vous avez 30 min de retard/.test(document.body.innerText)", "§474"));
+  const after474 = (await serverState(async () => (await pageApi(`/api/v1/teacher/courses/${id301}/register?year=${encodeURIComponent("2026 - 2027")}&semester=1`)).d, (r) => r.students.find((x) => x.id === "DEMO-0102").summary.state === "limit"));
+  check("les absences de cette séance ne comptent plus : DEMO-0102 n'est plus au-delà de 15 % (mais reste signalé)", after474.students.find((s) => s.id === "DEMO-0102").summary.state === "limit" && Boolean(after474.students.find((s) => s.id === "DEMO-0102").flagged_at), JSON.stringify(after474.students.find((s) => s.id === "DEMO-0102").summary.state));
+  await shot("07f-appel-pointe");
+
+  // --- HORS LIGNE : pointer sans réseau, puis le serveur a changé entre-temps (conflit)
+  await setOffline(true);
+  check("hors ligne : le bandeau « Hors ligne » apparaît", await until("/Hors ligne/.test(document.body.innerText)", "bandeau hors ligne"));
+  await clickText("[data-line='DEMO-0105']", "Absent");
+  await clickText("[data-line='DEMO-0106']", "Absent");
+  check("hors ligne : les pointages s'affichent tout de suite et le bilan est dit « en attente »", await until("/Absent/.test(document.querySelector('[data-line=\"DEMO-0105\"]')?.innerText ?? '') && /Bilan à jour au retour du réseau/.test(document.querySelector('[data-line=\"DEMO-0105\"]')?.innerText ?? '')", "pointage hors ligne"), (await rowText("DEMO-0105")).replace(/\n/g, " ").slice(0, 120));
+  check("hors ligne : « 2 changements en attente » est visible dans l'en-tête", await until("/2 changements en attente/.test(" + PENDING + ")", "chip en attente"), await ev(PENDING));
+  await sleep(1200);
+  // Pendant ce temps, un autre appareil change les MÊMES pointages sur le serveur (plus récents que ceux faits hors ligne).
+  const other = await apiAs("enseignant.demo", PASSWORD);
+  const r1 = await other("PUT", `/api/v1/teacher/sessions/${sid}/marks/DEMO-0105`, { status: "retard", minutes_late: 7 });
+  const r2 = await other("PUT", `/api/v1/teacher/sessions/${sid}/marks/DEMO-0106`, { status: "retard", minutes_late: 8 });
+  check("(préparation) un autre appareil a modifié les deux pointages sur le serveur", r1.status === 200 && r2.status === 200, `${r1.status}/${r2.status}`);
+  await setOffline(false);
+  check("retour du réseau : le serveur fait foi, les 2 changements sont « à vérifier » (rien n'est écrasé)", await until("/2 changements à vérifier/.test(" + PENDING + ")", "conflits", 25000), await ev(PENDING));
+  const stillServer = (await pageApi(`/api/v1/teacher/sessions/${sid}`)).d.lines;
+  check("les données du serveur sont intactes tant que l'enseignant n'a pas choisi", stillServer.find((l) => l.student_id === "DEMO-0105").status === "retard" && stillServer.find((l) => l.student_id === "DEMO-0106").minutes_late === 8);
+  await ev("[...document.querySelectorAll('header button')].find(b => /à vérifier/.test(b.getAttribute('aria-label') ?? '')).click()");
+  await until("!!document.querySelector('dialog[open]')", "panneau");
+  const panel = await ev("document.querySelector('dialog[open]').innerText");
+  check("le panneau dit ce qui s'est passé, avec les deux choix", /a été modifié depuis/.test(panel) && /Appliquer quand même/.test(panel) && /Ignorer ce changement/.test(panel), panel.replace(/\n/g, " ").slice(0, 160));
+  await shot("07g-conflits");
+  // 1re carte (DEMO-0105) : appliquer quand même ; la suivante (DEMO-0106) : ignorer
+  await ev("[...document.querySelectorAll('dialog[open] button')].find(b => /Appliquer quand même/.test(b.innerText)).click()");
+  await until("!/2 changements/.test(" + PENDING + ")", "après appliquer");
+  await sleep(1500);
+  await ev("[...document.querySelectorAll('dialog[open] button')].find(b => /Ignorer ce changement/.test(b.innerText))?.click()");
+  check("tout est tranché : plus aucun changement en attente", await until("!/changement/.test(" + PENDING + ")", "file vide", 20000), await ev(PENDING));
+  await sleep(800);
+  const resolved = (await pageApi(`/api/v1/teacher/sessions/${sid}`)).d.lines;
+  check("« Appliquer quand même » a écrit l'absence (DEMO-0105) ; « Ignorer » a gardé le serveur (DEMO-0106 : retard 8 min)", resolved.find((l) => l.student_id === "DEMO-0105").status === "absent" && resolved.find((l) => l.student_id === "DEMO-0106").status === "retard" && resolved.find((l) => l.student_id === "DEMO-0106").minutes_late === 8, JSON.stringify(resolved.filter((l) => /0105|0106/.test(l.student_id)).map((l) => [l.student_id, l.status, l.minutes_late])));
+
+  // --- HORS LIGNE : ouvrir une séance sans réseau, pointer, puis tout part dans l'ordre au retour du réseau
+  await go(href301);
+  await until("location.pathname === '/presence/registre/' && /Base des 15 %/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "registre (copie)");
+  await sleep(500);
+  const yesterday = localDay(Date.now() - 86400000);
+  check("le service worker est actif et contrôle la page (coque gardée pour le hors ligne)", await until("!!navigator.serviceWorker?.controller", "service worker actif", 20000));
+  await setOffline(true);
+  await send("Page.reload");
+  check("hors ligne : la page se RECHARGE quand même (coque gardée par le service worker) et rouvre la copie du registre", await until("/Base des 15 %/.test(document.body.innerText) && /Vous voyez la copie gardée sur cet appareil/.test(document.body.innerText)", "rechargement hors ligne", 25000), (await path()));
+  await shot("07g2-registre-hors-ligne");
+  await setValue("#date", yesterday);
+  await setValue("#planned-time", "14:00");
+  await ev("[...document.querySelectorAll('button')].find(b => /Faire l’appel/.test(b.innerText)).click()");
+  check("hors ligne : la séance s'ouvre quand même, avec la liste d'appel des 6 inscrits", await until("location.pathname === '/presence/appel/' && document.querySelectorAll('[data-line]').length === 6 && /pas encore envoyée/.test(document.body.innerText)", "séance locale"), await path());
+  await clickText("[data-line='DEMO-0101']", "Absent");
+  await clickText("[data-line='DEMO-0103']", "Présent");
+  check("hors ligne : 2 pointages sur cette séance locale, 3 changements en attente (ouverture + 2 pointages)", await until("/2 \\/ 6 pointés/.test(document.body.innerText) && /3 changements en attente/.test(" + PENDING + ")", "séance locale pointée"), await ev(PENDING));
+  await shot("07h-seance-hors-ligne");
+  await setOffline(false);
+  check("retour du réseau : tout part dans l'ordre, la file se vide", await until("!/changement/.test(" + PENDING + ")", "envoi", 30000));
+  check("l'adresse suit : la séance a reçu son vrai identifiant serveur", await until("Number(new URL(location.href).searchParams.get('seance')) > 0", "vrai identifiant", 15000), await ev("location.search"));
+  await sleep(800);
+  const list = (await pageApi(`/api/v1/teacher/courses/${id301}/register?year=${encodeURIComponent("2026 - 2027")}&semester=1`)).d;
+  const created = list.sessions.find((s) => s.date === yesterday && s.planned_time === "14:00");
+  const createdLines = created ? (await pageApi(`/api/v1/teacher/sessions/${created.id}`)).d.lines : [];
+  check("côté serveur : la séance d'hier existe UNE fois, avec les 2 pointages faits hors ligne", Boolean(created) && list.sessions.filter((s) => s.date === yesterday && s.planned_time === "14:00").length === 1 && createdLines.find((l) => l.student_id === "DEMO-0101")?.status === "absent" && createdLines.find((l) => l.student_id === "DEMO-0103")?.status === "present", JSON.stringify(created ?? null).slice(0, 100));
+
+  // --- supprimer la séance de test (confirmation en deux temps)
+  await ev("[...document.querySelectorAll('button')].find(b => /Supprimer cette séance/.test(b.innerText)).click()");
+  check("supprimer demande une confirmation explicite", await until("/tous ses pointages/.test(document.body.innerText)", "confirmation"));
+  await ev("[...document.querySelectorAll('button')].find(b => /Oui, supprimer la séance/.test(b.innerText)).click()");
+  check("après suppression on revient au registre", await until("location.pathname === '/presence/registre/'", "retour registre"));
+  const afterDelete = await serverState(async () => (await pageApi(`/api/v1/teacher/courses/${id301}/register?year=${encodeURIComponent("2026 - 2027")}&semester=1`)).d, (r) => !r.sessions.some((s) => s.date === yesterday));
+  check("côté serveur : la séance d'hier a disparu, les 4 autres séances restent", !afterDelete.sessions.some((s) => s.date === yesterday) && afterDelete.sessions.length === 4, String(afterDelete.sessions.length));
+
+  // --- mise en page et accessibilité de l'espace enseignant
+  await go("/presence/");
+  await until("/Systèmes d’exploitation/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "liste");
+  const layT = JSON.parse(await ev(`JSON.stringify({ scroll: document.documentElement.scrollWidth, inner: innerWidth, h1: document.querySelectorAll('h1').length, sansNom: [...document.querySelectorAll('a,button,summary')].filter(e => !(e.getAttribute('aria-label') || e.innerText.trim())).length })`));
+  check("liste des cours : aucun défilement horizontal, un seul h1, contrôles nommés", layT.scroll <= layT.inner && layT.h1 === 1 && layT.sansNom === 0, JSON.stringify(layT));
+  await go(href301);
+  await until("location.pathname === '/presence/registre/' && /Base des 15 %/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "registre final");
+  const layR = JSON.parse(await ev(`JSON.stringify({ scroll: document.documentElement.scrollWidth, inner: innerWidth, petits: [...document.querySelectorAll('main button, main a, main input, main select')].map(e => (e.type === 'checkbox' && e.labels?.[0]) || e).filter(e => e.getBoundingClientRect().width > 1 && Math.min(e.getBoundingClientRect().height, e.getBoundingClientRect().width) < 40).map(e => (e.getAttribute('aria-label') || e.innerText || e.id).trim().slice(0, 24)), sansLabel: [...document.querySelectorAll('main input, main select')].filter(e => !e.labels?.length && !e.getAttribute('aria-label')).length })`));
+  check("registre : aucun défilement horizontal, cibles tactiles ≥ 40 px, chaque champ a son étiquette", layR.scroll <= layR.inner && layR.petits.length === 0 && layR.sansLabel === 0, JSON.stringify(layR));
+
+  // --- déconnexion propre (file vide : pas de confirmation) : plus rien de l'enseignant sur l'appareil
+  await ev("document.querySelector('button[aria-label^=\"Se déconnecter\"]').click()");
+  check("déconnexion de l'enseignant (aucun changement en attente, aucune confirmation)", await until("location.pathname.startsWith('/login')", "déconnexion enseignant"));
+  const leftover = await ev("new Promise(res => { const r = indexedDB.open('registrar-offline'); r.onsuccess = () => { const db = r.result; const t = db.transaction(['ops','snapshots'], 'readonly'); let n = 0; t.objectStore('ops').count().onsuccess = e => { n += e.target.result; t.objectStore('snapshots').count().onsuccess = e2 => res(n + e2.target.result); }; }; r.onerror = () => res(-1); })");
+  check("déconnexion : plus aucune copie ni file de cet enseignant sur l'appareil (appareil partagé)", leftover === 0, String(leftover));
+}
+
+console.log(String.fromCharCode(10) + "7c. Enseignant : remise de notes (colonnes libres, en ligne puis hors ligne)");
+{
+  const API = "http://localhost:8000";
+  const pageApi = (p) => ev(`fetch('${API}${p}', { credentials: 'include', headers: { Accept: 'application/json' } }).then(async r => JSON.stringify({ s: r.status, d: (await r.json()).data }))`).then(JSON.parse);
+  const serverState = async (read, ok) => { let last; for (let i = 0; i < 40; i++) { last = await read(); if (ok(last)) return last; await sleep(200); } return last; };
+  const setValue = (sel, v) => ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(e, ${JSON.stringify(v)}); e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  const typeCell = async (sel, v) => { await ev(`document.querySelector(${JSON.stringify(sel)}).focus()`); await setValue(sel, v); await ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); e.blur(); e.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); })()`); };
+  const clickBtn = (re) => ev(`(() => { const b = [...document.querySelectorAll('main button')].find(x => ${re}.test(x.innerText) || ${re}.test(x.getAttribute('aria-label') || '')); if (!b) return false; b.click(); return true; })()`);
+  const card = (id) => ev(`document.querySelector('[data-student="${id}"]')?.innerText ?? ''`);
+  const PENDING = "(document.querySelector('header button[aria-label*=\"changement\"], header button[aria-label*=\"Envoi\"]')?.getAttribute('aria-label') ?? '')";
+  const cdpOn = (wsUrl, method, params) => new Promise((resolve) => { const w = new WebSocket(wsUrl); w.onopen = () => { w.send(JSON.stringify({ id: 1, method: "Network.enable" })); w.send(JSON.stringify({ id: 2, method, params })); }; w.onmessage = (m) => { if (JSON.parse(m.data).id === 2) { w.close(); resolve(); } }; w.onerror = () => resolve(); setTimeout(resolve, 3000); });
+  const setOffline = async (off) => {
+    scriptsOff = off;
+    const conditions = { offline: off, latency: 0, downloadThroughput: -1, uploadThroughput: -1 };
+    await send("Network.emulateNetworkConditions", conditions);
+    const targets = await (await fetch("http://127.0.0.1:9340/json")).json();
+    for (const t of targets.filter((x) => x.type === "service_worker")) await cdpOn(t.webSocketDebuggerUrl, "Network.emulateNetworkConditions", conditions);
+    if (!off) await ev("window.dispatchEvent(new Event('online'))");
+  };
+  const waitSheet = (label) => until("location.pathname === '/notes/feuille/' && !document.querySelector('[aria-busy=true]') && document.querySelectorAll('[data-student]').length > 0", label, 25000);
+
+  await go("/login/");
+  await type("#identifier", "enseignant.demo");
+  await type("#password", PASSWORD);
+  await submit();
+  await until("location.pathname === '/' && /Bonjour Hasina/.test(document.body.innerText)", "accueil enseignant 2");
+  await click("a[href='/notes/']");
+  await until("/Systèmes d’exploitation/.test(document.body.innerText) && /Réseaux avancés/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "liste des feuilles", 25000);
+  await sleep(500);
+  const list = await text();
+  check("remise des notes : mes deux feuilles, avec leur état (Brouillon, Renvoyée pour correction) et le motif de renvoi", /DEMO 301/.test(list) && /Brouillon/.test(list) && /DEMO 302/.test(list) && /Renvoyée pour correction/.test(list) && /Le projet de DEMO-0102 semble trop élevé/.test(list), list.slice(0, 140).replace(/\n/g, " "));
+  check("le cours d'un autre enseignant n'apparaît pas", !/DEMO 303|autre enseignant/.test(list));
+  await shot("07i-notes-liste");
+
+  // --- feuille DEMO 301 : cinq colonnes par défaut, une ligne incomplète
+  const href301 = await ev("[...document.querySelectorAll('a[href*=\"/notes/feuille/\"]')].find(a => /DEMO 301/.test(a.innerText)).getAttribute('href')");
+  const id301 = Number(new URL(href301, WEB).searchParams.get("cours"));
+  const foreign = await pageApi(`/api/v1/teacher/grading/courses/${id301 + 2}/sheet?year=${encodeURIComponent("2026 - 2027")}&semester=1`);
+  check("la feuille d'un autre enseignant : 404, comme un cours inexistant", foreign.s === 404, String(foreign.s));
+  await click(`a[href='${href301}']`);
+  await waitSheet("feuille 301");
+  await sleep(500);
+  const sheet = await text();
+  check("feuille : cinq colonnes par défaut (Quiz, Recherche, Autres, Examen mi-sem., Examen final), total 100 %, éditeur replié tant que le total est bon", (await ev("[...document.querySelectorAll('input[id^=col-]')].map(i => i.value).join('|')")) === "Quiz|Recherche|Autres|Examen mi-sem.|Examen final" && /Total 100 %/.test(sheet) && (await ev("document.querySelector('details.group summary')?.parentElement.open === false")));
+  check("note calculée affichée avec la virgule (DEMO-0101 : 12,6 / 20) et statut spécial V pour DEMO-0105", /12,6 \/ 20/.test(await card("DEMO-0101")) && /Validé \(V\)/.test(await card("DEMO-0105")));
+  check("DEMO-0104 est incomplète : la carte dit ce qui manque, le contrôle bloque la transmission", /Manque : Autres, Examen mi-sem\., Examen final/.test(await card("DEMO-0104")) && /1 étudiant\(s\) avec une composante pondérée non saisie : Ranaivo Fitia/.test(sheet) && (await ev("[...document.querySelectorAll('main button')].find(b => /Transmettre au registrariat/.test(b.innerText)).disabled")));
+  check("contrôle : « 4 / 6 notes prêtes » et avertissement pour l'étudiant sans aucune note", /4 \/ 6\s*notes prêtes/.test(sheet) && /1 étudiant\(s\) sans aucune note/.test(sheet));
+  check("étudiant au-delà de 15 % d'absences signalé sur la feuille (DEMO-0101)", /Absences > 15 %/.test(await card("DEMO-0101")));
+  await shot("07j-feuille-notes");
+
+  // --- saisie : une note invalide est refusée, une note valide complète la ligne
+  await typeCell("#DEMO-0104-3", "25");
+  check("une note hors de 0 à 20 est refusée avec un message, sans rien enregistrer", await until("/Note invalide/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '')", "refus 25"));
+  const s0104 = await pageApi(`/api/v1/teacher/grading/courses/${id301}/sheet?year=${encodeURIComponent("2026 - 2027")}&semester=1`);
+  check("côté serveur : rien n'a été écrit pour cette saisie refusée", (s0104.d.lines.find((l) => l.student_id === "DEMO-0104").values["3"] ?? null) === null);
+  await typeCell("#DEMO-0104-3", "12,5");
+  await typeCell("#DEMO-0104-4", "9");
+  await typeCell("#DEMO-0104-5", "11");
+  check("la note de DEMO-0104 se calcule dès la dernière saisie : (12×10 + 10×20 + 12,5×10 + 9×25 + 11×35) / 100 = 10,55", await until("/10,55 \\/ 20/.test(document.querySelector('[data-student=\"DEMO-0104\"]')?.innerText ?? '')", "note 0104"), (await card("DEMO-0104")).replace(/\n/g, " ").slice(0, 120));
+  check("plus aucun point bloquant : la transmission est possible", await until("!(document.querySelector('[role=alert]')?.innerText ?? '').includes('composante pondérée') && ![...document.querySelectorAll('main button')].find(b => /Transmettre au registrariat/.test(b.innerText)).disabled", "plus de blocage"));
+  const saved = await serverState(async () => (await pageApi(`/api/v1/teacher/grading/courses/${id301}/sheet?year=${encodeURIComponent("2026 - 2027")}&semester=1`)).d.lines.find((l) => l.student_id === "DEMO-0104"), (l) => l.values["5"] === 11);
+  check("côté serveur : les trois notes de DEMO-0104 sont enregistrées (virgule lue : 12,5)", saved.values["3"] === 12.5 && saved.values["4"] === 9 && saved.values["5"] === 11, JSON.stringify(saved.values));
+
+  // --- colonnes libres : renommer, supprimer, ajouter, répartir 100 %
+  await setValue("#col-s1", "Contrôle continu");
+  await setValue("#pct-s2", "0");
+  check("le total en cours est annoncé : il reste 20 % à répartir (sans rien enregistrer encore)", await until("/il reste 20 % à répartir/.test(document.body.innerText)", "reste 20"));
+  check("« Enregistrer les colonnes » reste utilisable : on peut enregistrer un brouillon même si le total n'est pas 100 %", await ev("![...document.querySelectorAll('main button')].find(b => /Enregistrer les colonnes/.test(b.innerText)).disabled"));
+  await setValue("#pct-s5", "55");
+  check("total à 100 % : l'indicateur passe au vert, sans message d'erreur", await until("/Total 100 %/.test(document.body.innerText) && !/à répartir|de trop/.test(document.body.innerText)", "total 100"));
+  await clickBtn(/Supprimer la colonne Recherche/);
+  await clickBtn(/Ajouter une colonne/);
+  await until("!!document.querySelector('input[id^=col-n]')", "nouvelle colonne");
+  await setValue("input[id^=col-n]", "Oral");
+  await setValue("input[id^=pct-n]", "0");
+  await clickBtn(/Enregistrer les colonnes/);
+  check("colonnes enregistrées : « Contrôle continu », « Autres », « Examen mi-sem. », « Examen final », « Oral » (la colonne Recherche et ses notes ont disparu)", await until("/Colonnes enregistrées/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '')", "colonnes enregistrées"));
+  const cols = await serverState(async () => (await pageApi(`/api/v1/teacher/grading/courses/${id301}/sheet?year=${encodeURIComponent("2026 - 2027")}&semester=1`)).d, (d) => d.components.some((c) => c.label === "Oral"));
+  check("côté serveur : 5 colonnes choisies par l'enseignant, total 100, l'ancienne colonne « Recherche » est partie", JSON.stringify(cols.components.map((c) => [c.label, c.weight])) === JSON.stringify([["Contrôle continu", 10], ["Autres", 10], ["Examen mi-sem.", 25], ["Examen final", 55], ["Oral", 0]]) && cols.total_weight === 100, JSON.stringify(cols.components.map((c) => c.label)));
+  check("les cartes des étudiants montrent les nouveaux titres, et la note suit la nouvelle pondération", await until("/Contrôle continu/.test(document.querySelector('[data-student=\"DEMO-0101\"]')?.innerText ?? '') && !/Recherche/.test(document.querySelector('[data-student=\"DEMO-0101\"]')?.innerText ?? '')", "nouveaux titres"));
+  const oralSlot = cols.components.find((c) => c.label === "Oral").slot;
+  check("une colonne à 0 % est grisée (ignorée dans le calcul)", await ev(`document.querySelector('#DEMO-0101-${oralSlot}').disabled`));
+  await shot("07k-colonnes-libres");
+
+  // titre en double refusé côté écran
+  await setValue("#col-s3", "Autres");
+  await setValue("#col-s4", "autres");
+  check("deux colonnes au même titre : message clair, enregistrement impossible", await until("/Deux colonnes ont le même titre/.test(document.body.innerText) && [...document.querySelectorAll('main button')].find(b => /Enregistrer les colonnes/.test(b.innerText)).disabled", "titre en double"));
+  await clickBtn(/Annuler les changements/);
+
+  // --- HORS LIGNE : saisie sans réseau, puis envoi
+  await setOffline(true);
+  check("hors ligne : modifier les colonnes est refusé avec une explication (la saisie des notes reste possible)", await until("/modifier les colonnes demande le réseau/.test(document.body.innerText)", "colonnes hors ligne"));
+  await typeCell("#DEMO-0106-1", "13");
+  check("hors ligne : la note s'affiche tout de suite avec « à envoyer », et le compteur de changements en attente monte", await until("/à envoyer/.test(document.querySelector('[data-student=\"DEMO-0106\"]')?.innerText ?? '') && /1 changement en attente/.test(" + PENDING + ")", "saisie hors ligne"), await ev(PENDING));
+  await setOffline(false);
+  check("retour du réseau : la saisie part, le compteur disparaît", await until("!/changement/.test(" + PENDING + ")", "envoi", 30000));
+  const off = await serverState(async () => (await pageApi(`/api/v1/teacher/grading/courses/${id301}/sheet?year=${encodeURIComponent("2026 - 2027")}&semester=1`)).d.lines.find((l) => l.student_id === "DEMO-0106"), (l) => Object.values(l.values).includes(13));
+  check("côté serveur : la note saisie hors ligne est bien enregistrée", Object.values(off.values).includes(13), JSON.stringify(off.values));
+
+  // --- DEMO-0106 n'a plus qu'une colonne remplie : la transmission reste bloquée
+  check("avec une ligne incomplète (DEMO-0106), le bouton « Transmettre au registrariat » reste désactivé et le contrôle dit pourquoi", (await ev("[...document.querySelectorAll('main button')].find(b => /Transmettre au registrariat/.test(b.innerText)).disabled")) && /composante pondérée non saisie : Soloniaina Tahina/.test(await text()), "");
+
+  // --- feuille renvoyée (colonnes libres déjà créées) : on corrige et on transmet
+  await go("/notes/");
+  await until("/Réseaux avancés/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "liste 2");
+  const href302 = await ev("[...document.querySelectorAll('a[href*=\"/notes/feuille/\"]')].find(a => /DEMO 302/.test(a.innerText)).getAttribute('href')");
+  await click(`a[href='${href302}']`);
+  await waitSheet("feuille 302");
+  await sleep(500);
+  const s302 = await text();
+  check("feuille renvoyée : bandeau avec le motif du registrariat, trois colonnes libres (Devoir 1, Projet, Examen), total 100 %", /Le registrariat vous a renvoyé cette feuille/.test(s302) && /Le projet de DEMO-0102 semble trop élevé/.test(s302) && (await ev("[...document.querySelectorAll('input[id^=col-]')].map(i => i.value).join('|')")) === "Devoir 1|Projet|Examen" && /Total 100 %/.test(s302));
+  check("la note suit les poids choisis (DEMO-0102 : 11×0,3 + 20×0,3 + 15×0,4 = 15,3)", /15,3 \/ 20/.test(await card("DEMO-0102")));
+  const id302 = Number(new URL(href302, WEB).searchParams.get("cours"));
+  const slotProjet = (await pageApi(`/api/v1/teacher/grading/courses/${id302}/sheet?year=${encodeURIComponent("2026 - 2027")}&semester=1`)).d.components.find((c) => c.label === "Projet").slot;
+  await typeCell(`#DEMO-0102-${slotProjet}`, "14");
+  check("après correction : 11×0,3 + 14×0,3 + 15×0,4 = 13,5", await until("/13,5 \\/ 20/.test(document.querySelector('[data-student=\"DEMO-0102\"]')?.innerText ?? '')", "note corrigée"));
+  await ev("[...document.querySelectorAll('main button')].find(b => /Transmettre au registrariat/.test(b.innerText)).click()");
+  await until("/Vous ne pourrez plus la modifier/.test(document.body.innerText)", "confirmation 302");
+  await ev("[...document.querySelectorAll('main button')].find(b => /Oui, transmettre/.test(b.innerText)).click()");
+  check("transmise : le statut passe à « En attente de validation » et le bandeau dit que la feuille est en lecture seule", await until("/Feuille transmise/.test(document.body.innerText) && /lecture seule/.test(document.body.innerText) && /En attente de validation/.test(document.body.innerText)", "transmission", 25000));
+  check("transmise : toutes les cases sont verrouillées, plus de bouton de transmission", await ev("[...document.querySelectorAll('main input[id^=DEMO]')].every(i => i.disabled) && ![...document.querySelectorAll('main button')].some(b => /Transmettre au registrariat/.test(b.innerText))"));
+  const sub = (await pageApi(`/api/v1/teacher/grading/courses/${id302}/sheet?year=${encodeURIComponent("2026 - 2027")}&semester=1`)).d;
+  check("côté serveur : statut « soumise », motif de renvoi effacé ; aucune note n'a touché au bulletin des étudiants", sub.remise.status === "soumise" && sub.remise.reject_reason === null && sub.remise.editable === false);
+  const write = await ev(`fetch('${API}/api/v1/teacher/grading/courses/${id302}/cells/DEMO-0102', { method: 'PUT', credentials: 'include', headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-XSRF-TOKEN': decodeURIComponent(document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN=')).slice(11)) }, body: JSON.stringify({ year: '2026 - 2027', semester: 1, field: 'c1', value: 1, force: true }) }).then(r => r.status)`);
+  check("même en forçant, le serveur refuse d'écrire dans une feuille transmise (409)", write === 409, String(write));
+  await shot("07l-feuille-transmise");
+
+  // --- mise en page
+  const lay = JSON.parse(await ev(`JSON.stringify({ scroll: document.documentElement.scrollWidth, inner: innerWidth, h1: document.querySelectorAll('h1').length, sansNom: [...document.querySelectorAll('a,button,summary')].filter(e => !(e.getAttribute('aria-label') || e.innerText.trim())).length, sansEtiquette: [...document.querySelectorAll('main input, main select')].filter(e => !e.labels?.length && !e.getAttribute('aria-label')).length })`));
+  check("feuille de notes : aucun défilement horizontal, un seul h1, contrôles nommés, chaque champ étiqueté", lay.scroll <= lay.inner && lay.h1 === 1 && lay.sansNom === 0 && lay.sansEtiquette === 0, JSON.stringify(lay));
+  await ev("document.querySelector('button[aria-label^=\"Se déconnecter\"]').click()");
+  check("déconnexion", await until("location.pathname.startsWith('/login')", "déconnexion notes"));
+}
+
+console.log(String.fromCharCode(10) + "7d. Registrariat : validation des remises de notes (annulable 10 s)");
+{
+  const API = "http://localhost:8000";
+  const apiAs = async (pseudo, password) => {
+    const jar = {};
+    const take = (res) => { for (const c of res.headers.getSetCookie?.() ?? []) { const [kv] = c.split(";"); const i = kv.indexOf("="); jar[kv.slice(0, i)] = kv.slice(i + 1); } };
+    const base = { Origin: WEB, Referer: WEB + "/", Accept: "application/json" };
+    take(await fetch(API + "/api/v1/auth/csrf", { headers: base }));
+    const call = async (method, p, body) => {
+      const res = await fetch(API + p, { method, headers: { ...base, "Content-Type": "application/json", Cookie: Object.entries(jar).map(([k, v]) => `${k}=${v}`).join("; "), "X-XSRF-TOKEN": decodeURIComponent(jar["XSRF-TOKEN"] ?? "") }, body: body ? JSON.stringify(body) : undefined });
+      take(res);
+      return { status: res.status, json: await res.json().catch(() => null) };
+    };
+    await call("POST", "/api/v1/auth/login", { identifier: pseudo, password });
+    return call;
+  };
+  const pageApi = (p) => ev(`fetch('${API}${p}', { credentials: 'include', headers: { Accept: 'application/json' } }).then(async r => JSON.stringify({ s: r.status, d: (await r.json()).data }))`).then(JSON.parse);
+  const serverState = async (read, ok) => { let last; for (let i = 0; i < 60; i++) { last = await read(); if (ok(last)) return last; await sleep(250); } return last; };
+  const clickBtn = (re) => ev(`(() => { const b = [...document.querySelectorAll('main button')].find(x => ${re}.test(x.innerText)); if (!b) return false; b.click(); return true; })()`);
+  const waitReview = (label) => until("location.pathname === '/validations/feuille/' && !document.querySelector('[aria-busy=true]') && document.querySelectorAll('[data-student]').length > 0", label, 25000);
+
+  // --- un enseignant termine la feuille DEMO 301 et la transmet (pour avoir de quoi renvoyer plus tard)
+  const teacher = await apiAs("enseignant.demo", PASSWORD);
+  const tc = await teacher("GET", "/api/v1/teacher/grading/courses?year=" + encodeURIComponent("2026 - 2027"));
+  const c301 = tc.json.data.courses.find((c) => c.code === "DEMO 301");
+  const sh301 = (await teacher("GET", `/api/v1/teacher/grading/courses/${c301.id}/sheet?year=${encodeURIComponent("2026 - 2027")}&semester=1`)).json.data;
+  const slots = sh301.components.filter((c) => c.weight > 0).map((c) => c.slot);
+  for (const l of sh301.lines) {
+    for (const s of slots) {
+      if (!l.statut_special && l.values[String(s)] == null) await teacher("PUT", `/api/v1/teacher/grading/courses/${c301.id}/cells/${l.student_id}`, { year: "2026 - 2027", semester: 1, field: `c${s}`, value: 12 });
+    }
+  }
+  const sub301 = await teacher("POST", `/api/v1/teacher/grading/courses/${c301.id}/submit`, { year: "2026 - 2027", semester: 1 });
+  check("(préparation) la feuille DEMO 301 est transmise par son enseignant", sub301.status === 200, String(sub301.status));
+
+  await go("/login/");
+  await type("#identifier", "registraire.demo");
+  await type("#password", PASSWORD);
+  await submit();
+  check("le registrariat arrive sur son accueil avec « Validation des notes »", await until("location.pathname === '/' && /Validation des notes/.test(document.body.innerText)", "accueil registrariat"), await path());
+  const nav = await ev("[...document.querySelectorAll('nav.fixed a')].map(a => a.textContent.trim())");
+  check("menu du registrariat : Accueil, Validations, Assiduité, Étudiants et Plus (rien qui ne soit pas le sien : ni Présence ni Notes)", JSON.stringify(nav) === JSON.stringify(["Accueil", "Validations", "Assiduité", "Étudiants", "Plus"]), JSON.stringify(nav));
+  await shot("07m-registrariat-accueil");
+
+  await click("a[href='/validations/']");
+  await until("/DEMO 30[12]/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "file de validation", 25000);
+  await sleep(500);
+  const queue = await text();
+  check("file « À valider » : les deux feuilles transmises, avec leur enseignant et les notes prêtes", /DEMO 301/.test(queue) && /DEMO 302/.test(queue) && /Hasina Rasolofo/.test(queue) && /6 \/ 6\s*notes prêtes/.test(queue) && /2 \/ 2\s*notes prêtes/.test(queue), queue.slice(0, 160).replace(/\n/g, " "));
+  check("les compteurs des onglets sont affichés", /À valider\s*2/.test(queue));
+  await shot("07n-file-validation");
+  const href302 = await ev("[...document.querySelectorAll('a[href*=\"/validations/feuille/\"]')].find(a => /DEMO 302/.test(a.innerText)).getAttribute('href')");
+  const href301r = await ev("[...document.querySelectorAll('a[href*=\"/validations/feuille/\"]')].find(a => /DEMO 301/.test(a.innerText)).getAttribute('href')");
+  const id302 = Number(new URL(href302, WEB).searchParams.get("id"));
+
+  // --- contrôle de DEMO 302 : ce qui serait écrit, contre ce qui est en base
+  await click(`a[href='${href302}']`);
+  await waitReview("feuille 302 (registrariat)");
+  await sleep(400);
+  const page = await text();
+  check("le contrôle dit que rien ne bloque et combien de notes changeront dans le bulletin", /Rien ne bloque la validation/.test(page) && /2\s*note\(s\) changeront/.test(page), "");
+  check("chaque ligne montre la note en base et celle qui serait écrite (— → 13 ; — → 13,5)", /En base :\s*—\s*13(?!,)/.test((await ev("document.querySelector('[data-student=\"DEMO-0101\"]').innerText.replace(/\\n/g,' ')"))) && /En base :\s*—\s*13,5/.test(await ev("document.querySelector('[data-student=\"DEMO-0102\"]').innerText.replace(/\\n/g,' ')")), (await ev("document.querySelector('[data-student=\"DEMO-0102\"]').innerText.replace(/\\n/g,' ')")).slice(0, 160));
+  check("les colonnes libres de l'enseignant (Devoir 1, Projet, Examen) sont montrées avec leur poids", /Devoir 1 \(30 %\)/.test(page) && /Projet \(30 %\)/.test(page) && /Examen \(40 %\)/.test(page));
+  await shot("07o-controle-feuille");
+  const before = await pageApi(`/api/v1/review/remises/${id302}`);
+  check("avant toute validation, les notes des étudiants n'ont pas de valeur en base", before.d.lines.every((l) => l.current_grade === null));
+
+  // --- valider, puis ANNULER dans le délai : rien n'est écrit
+  await clickBtn(/Valider la feuille/);
+  check("« Valider » ouvre un compte à rebours de 10 secondes, avec le bouton d'annulation", await until("/Validation dans \\d+ s/.test(document.body.innerText) && !![...document.querySelectorAll('main button')].find(b => /Annuler la validation/.test(b.innerText))", "compte à rebours"));
+  check("pendant le délai, le serveur a une demande en attente mais AUCUNE note n'est écrite", (await pageApi(`/api/v1/review/remises/${id302}`)).d.pending !== null && (await pageApi(`/api/v1/review/remises/${id302}`)).d.lines.every((l) => l.current_grade === null));
+  await shot("07p-compte-a-rebours");
+  await sleep(1500);
+  await clickBtn(/Annuler la validation/);
+  check("« Annuler » dit qu'aucune note n'a été écrite, et la feuille redevient « à valider »", await until("/Validation annulée/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '') && !!([...document.querySelectorAll('main button')].find(b => /Valider la feuille/.test(b.innerText)))", "annulation"));
+  await sleep(800);
+  const afterUndo = (await pageApi(`/api/v1/review/remises/${id302}`)).d;
+  check("côté serveur : plus de demande, statut toujours « soumise », aucune note écrite", afterUndo.pending === null && afterUndo.status === "soumise" && afterUndo.lines.every((l) => l.current_grade === null));
+  await sleep(12000);
+  check("même après plus de 10 s, rien ne s'est écrit (la demande annulée ne revient pas)", (await pageApi(`/api/v1/review/remises/${id302}`)).d.status === "soumise");
+
+  // --- valider pour de bon
+  await clickBtn(/Valider la feuille/);
+  await until("/Validation dans \\d+ s/.test(document.body.innerText)", "second compte à rebours");
+  check("la validation aboutit toute seule à la fin du délai : « Feuille validée », statut « Validée »", await until("/Feuille validée/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '') || /Validée/.test(document.querySelector('main')?.innerText ?? '')", "validation", 40000));
+  await sleep(1000);
+  const done = await serverState(async () => (await pageApi(`/api/v1/review/remises/${id302}`)).d, (d) => d.status === "validee");
+  const byId = Object.fromEntries(done.lines.map((l) => [l.student_id, l.current_grade]));
+  check("côté serveur : feuille validée, notes ÉCRITES dans le bulletin (DEMO-0101 : 13, DEMO-0102 : 13,5), plus de demande en attente", done.status === "validee" && Number(byId["DEMO-0101"]) === 13 && Number(byId["DEMO-0102"]) === 13.5 && done.pending === null, JSON.stringify(byId));
+  check("la page montre la feuille validée, sans bouton « Valider »", await until("/Feuille validée/.test(document.body.innerText) && ![...document.querySelectorAll('main button')].some(b => /Valider la feuille|Renvoyer/.test(b.innerText))", "page validée"));
+  await shot("07q-feuille-validee");
+
+  // --- renvoyer DEMO 301 avec un motif
+  await go(href301r);
+  await waitReview("feuille 301 (registrariat)");
+  await clickBtn(/Renvoyer à l’enseignant/);
+  await until("!!document.querySelector('#reason')", "formulaire de renvoi");
+  check("le renvoi exige un motif : le bouton reste inactif tant qu'il est vide", await ev("[...document.querySelectorAll('main button')].find(b => /Renvoyer la feuille/.test(b.innerText)).disabled"));
+  await ev("(() => { const e = document.querySelector('#reason'); const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; set.call(e, 'Le quiz de DEMO-0103 est à revérifier.'); e.dispatchEvent(new Event('input', { bubbles: true })); })()");
+  await clickBtn(/Renvoyer la feuille/);
+  check("la feuille est renvoyée : « Renvoyée à l'enseignant » avec le motif", await until("/Renvoyée à l’enseignant/.test(document.body.innerText) && /Le quiz de DEMO-0103 est à revérifier/.test(document.body.innerText)", "renvoi"));
+  const back = await teacher("GET", `/api/v1/teacher/grading/courses/${c301.id}/sheet?year=${encodeURIComponent("2026 - 2027")}&semester=1`);
+  check("l'enseignant retrouve sa feuille modifiable, avec le motif du registrariat", back.json.data.remise.status === "rejetee" && back.json.data.remise.editable === true && /à revérifier/.test(back.json.data.remise.reject_reason));
+  await shot("07r-feuille-renvoyee");
+
+  // --- les droits : un enseignant n'entre pas dans la validation, même par l'API
+  const t403 = await teacher("GET", "/api/v1/review/remises");
+  const t403b = await teacher("POST", `/api/v1/review/remises/${id302}/approve`);
+  check("un enseignant ne peut ni lire la file ni valider, même en appelant l'API directement (403)", t403.status === 403 && t403b.status === 403, `${t403.status}/${t403b.status}`);
+
+  const layV = JSON.parse(await ev(`JSON.stringify({ scroll: document.documentElement.scrollWidth, inner: innerWidth, h1: document.querySelectorAll('h1').length, sansNom: [...document.querySelectorAll('a,button,summary')].filter(e => !(e.getAttribute('aria-label') || e.innerText.trim())).length, sansEtiquette: [...document.querySelectorAll('main input, main select, main textarea')].filter(e => !e.labels?.length && !e.getAttribute('aria-label')).length })`));
+  check("contrôle d'une feuille : aucun défilement horizontal, un seul h1, contrôles nommés", layV.scroll <= layV.inner && layV.h1 === 1 && layV.sansNom === 0 && layV.sansEtiquette === 0, JSON.stringify(layV));
+  await ev("document.querySelector('button[aria-label^=\"Se déconnecter\"]').click()");
+  check("déconnexion du registrariat", await until("location.pathname.startsWith('/login')", "déconnexion registrariat"));
+}
+
+console.log(String.fromCharCode(10) + "7e. Registrariat : assiduité (signalements au-delà de 15 %, retards des enseignants)");
+{
+  const API = "http://localhost:8000";
+  const pageApi = (p, method = "GET") => ev(`fetch('${API}${p}', { method: '${method}', credentials: 'include', headers: { Accept: 'application/json', ${method === "GET" ? "" : "'X-XSRF-TOKEN': decodeURIComponent(document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN='))?.split('=')[1] ?? '')"} } }).then(async r => JSON.stringify({ s: r.status, d: (await r.json()).data }))`).then(JSON.parse);
+  const serverStateA = async (read, ok) => { let last; for (let i = 0; i < 60; i++) { last = await read(); if (ok(last)) return last; await sleep(250); } return last; };
+  const waitPage = (label) => until("location.pathname === '/assiduite/' && !document.querySelector('[aria-busy=true]') && /Au-delà de 15 % d’absences/.test(document.body.innerText)", label, 25000);
+
+  await go("/login/");
+  await type("#identifier", "registraire.demo");
+  await type("#password", PASSWORD);
+  await submit();
+  await until("location.pathname === '/' && /Assiduité/.test(document.body.innerText)", "accueil registrariat (assiduité)");
+  check("l'accueil du registrariat propose « Assiduité »", await ev("!!document.querySelector('main a[href=\"/assiduite/\"]')"));
+  await click("main a[href='/assiduite/']");
+  await waitPage("page assiduité");
+  await sleep(500);
+  const before = (await pageApi("/api/v1/review/attendance")).d;
+  const pending = before.flags.filter((f) => !f.processed_at);
+  const text0 = await text();
+  check("l'en-tête annonce le nombre de signalements à traiter, toutes années confondues (valeur du serveur)", new RegExp(`${before.pending_total} signalements? à traiter`).test(text0), text0.slice(0, 120).replace(/\n/g, " "));
+  check("chaque signalement montre l'étudiant, son cours, le compte permis et son état du jour", pending.length >= 2 && pending.every((f) => text0.includes(f.student_id) && text0.includes(f.code)) && /sur \d+ permises/.test(text0));
+  const inf = pending.find((f) => f.code === "INF 201");
+  const infCard = await ev("[...document.querySelectorAll('main li')].find(li => /INF 201/.test(li.innerText) && /DEMO-0001/.test(li.innerText))?.innerText ?? ''");
+  check("DEMO-0001 (signalé à 4 absences, une corrigée depuis) : « Revenu sous le seuil », avec le compte d'AUJOURD'HUI (3 sur 3 permises)", !!inf && inf.today.state === "limit" && /Revenu sous le seuil/.test(infCard) && /3 sur 3 permises/.test(infCard), infCard.replace(/\n/g, " ").slice(0, 200));
+  check("un étudiant encore au-delà reste marqué « Toujours au-delà »", before.flags.some((f) => !f.processed_at && f.today.state === "exceeded") && /Toujours au-delà/.test(text0));
+  check("le registre tenu sans séances prévues (MAT 110) est listé avec ses séances tenues", /Registres sans séances prévues/.test(text0) && /MAT 110/.test(text0) && /2\s*séances tenues/.test(text0));
+  check("le retard de 25 minutes d'un enseignant (INF 201) est listé, avec « séance sans pénalité » quand aucun message n'a été envoyé", /25 min de retard/.test(text0) && /Aucun message : séance sans pénalité pour les étudiants/.test(text0));
+  check("les retards sont comptés par enseignant", before.delays_by_teacher.length >= 1 && before.delays_by_teacher.every((t) => text0.includes(t.teacher)));
+  check("les signalements déjà traités sont masqués par défaut", !/Traité le 20 septembre 2026/.test(text0));
+  await shot("07s-assiduite");
+
+  // --- traiter un signalement
+  const target = inf;
+  await ev(`(() => { const b = [...document.querySelectorAll('main button')].find(x => /Marquer comme traité/.test(x.getAttribute('aria-label') ?? '') && x.getAttribute('aria-label').includes('INF 201')); b.click(); })()`);
+  check("« Traité » confirme par un message", await until("/Signalement marqué comme traité/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '')", "toast traité"));
+  const after = await serverStateA(async () => (await pageApi("/api/v1/review/attendance?processed=1")).d, (d) => d.flags.find((f) => f.id === target.id)?.processed_at);
+  const row = after.flags.find((f) => f.id === target.id);
+  check("côté serveur : le signalement est daté « traité » et le compteur baisse d'un", !!row?.processed_at && after.pending_total === before.pending_total - 1, JSON.stringify({ row: row?.processed_at, p: after.pending_total, b: before.pending_total }));
+  check("à l'écran : la carte disparaît et l'en-tête suit", await until(`![...document.querySelectorAll('main li')].some(li => /INF 201/.test(li.innerText) && /DEMO-0001/.test(li.innerText)) && /${after.pending_total === 0 ? "Aucun signalement à traiter" : after.pending_total + " signalements? à traiter"}/.test(document.body.innerText)`, "carte retirée"));
+  await shot("07t-assiduite-traite");
+
+  // --- afficher les traités
+  await click("main input[type=checkbox]");
+  check("« Afficher les traités » montre aussi ceux déjà traités, datés", await until("/Traité le 20 septembre 2026/.test(document.body.innerText) && /Traité le \\d+ \\S+ 2026/.test(document.body.innerText)", "traités affichés"));
+  await shot("07u-assiduite-traites");
+  await click("main input[type=checkbox]");
+  check("décocher les masque de nouveau", await until("!/Traité le 20 septembre 2026/.test(document.body.innerText)", "traités masqués"));
+
+  // --- le même signalement traité une seconde fois : rien ne change
+  const again = (await pageApi(`/api/v1/review/attendance/flags/${target.id}/process`, "POST")).d;
+  check("traiter deux fois le même signalement ne change rien (« processed: false », première date conservée)", again.processed === false && again.processed_at === row.processed_at, JSON.stringify(again));
+
+  const lay = JSON.parse(await ev(`JSON.stringify({ scroll: document.documentElement.scrollWidth, inner: innerWidth, h1: document.querySelectorAll('h1').length, sansNom: [...document.querySelectorAll('a,button,summary')].filter(e => !(e.getAttribute('aria-label') || e.innerText.trim())).length, sansEtiquette: [...document.querySelectorAll('main input, main select')].filter(e => !e.labels?.length && !e.getAttribute('aria-label')).length })`));
+  check("assiduité : aucun défilement horizontal, un seul h1, contrôles nommés, chaque champ étiqueté", lay.scroll <= lay.inner && lay.h1 === 1 && lay.sansNom === 0 && lay.sansEtiquette === 0, JSON.stringify(lay));
+  await ev("document.querySelector('button[aria-label^=\"Se déconnecter\"]').click()");
+  check("déconnexion du registrariat", await until("location.pathname.startsWith('/login')", "déconnexion registrariat (assiduité)"));
+
+  // --- les droits : un enseignant n'ouvre ni la page ni l'API
+  await type("#identifier", "enseignant.demo");
+  await type("#password", PASSWORD);
+  await submit();
+  await until("location.pathname === '/' && /Bonjour/.test(document.body.innerText) && /Présence/.test(document.body.innerText)", "accueil enseignant (assiduité)");
+  check("l'enseignant n'a pas « Assiduité » dans son menu", !(await ev("[...document.querySelectorAll('nav a')].some(a => /Assiduité/.test(a.textContent))")));
+  const t403 = await pageApi("/api/v1/review/attendance");
+  const t403b = await pageApi(`/api/v1/review/attendance/flags/${target.id}/process`, "POST");
+  check("un enseignant ne peut ni lire l'assiduité ni traiter un signalement, même en appelant l'API directement (403)", t403.s === 403 && t403b.s === 403, `${t403.s}/${t403b.s}`);
+  await go("/assiduite/");
+  check("la page « /assiduite/ » est expliquée à un enseignant : réservée au registrariat, aucune donnée", await until("/réservée au registrariat/.test(document.body.innerText)", "page réservée") && !/Au-delà de 15 % d’absences/.test(await text()));
+  await ev("document.querySelector('button[aria-label^=\"Se déconnecter\"]').click()");
+  check("déconnexion de l'enseignant", await until("location.pathname.startsWith('/login')", "déconnexion enseignant (assiduité)"));
+}
+
+console.log(String.fromCharCode(10) + "7f. Registrariat : validation groupée (cocher, valider, annuler, valider pour de bon)");
+{
+  const API = "http://localhost:8000";
+  const YEAR = "2026 - 2027";
+  const apiAs = async (pseudo, password) => {
+    const jar = {};
+    const take = (res) => { for (const c of res.headers.getSetCookie?.() ?? []) { const [kv] = c.split(";"); const i = kv.indexOf("="); jar[kv.slice(0, i)] = kv.slice(i + 1); } };
+    const base = { Origin: WEB, Referer: WEB + "/", Accept: "application/json" };
+    take(await fetch(API + "/api/v1/auth/csrf", { headers: base }));
+    const call = async (method, p, body) => {
+      const res = await fetch(API + p, { method, headers: { ...base, "Content-Type": "application/json", Cookie: Object.entries(jar).map(([k, v]) => `${k}=${v}`).join("; "), "X-XSRF-TOKEN": decodeURIComponent(jar["XSRF-TOKEN"] ?? "") }, body: body ? JSON.stringify(body) : undefined });
+      take(res);
+      return { status: res.status, json: await res.json().catch(() => null) };
+    };
+    await call("POST", "/api/v1/auth/login", { identifier: pseudo, password });
+    return call;
+  };
+  const pageApi = (p) => ev(`fetch('${API}${p}', { credentials: 'include', headers: { Accept: 'application/json' } }).then(async r => JSON.stringify({ s: r.status, d: (await r.json()).data }))`).then(JSON.parse);
+  const serverStateB = async (read, ok) => { let last; for (let i = 0; i < 80; i++) { last = await read(); if (ok(last)) return last; await sleep(250); } return last; };
+  const clickBtn = (re) => ev(`(() => { const b = [...document.querySelectorAll('main button')].find(x => ${re}.test(x.innerText)); if (!b || b.disabled) return false; b.click(); return true; })()`);
+
+  // --- préparation : deux feuilles complètes transmises (DEMO 301 renvoyée puis retransmise, DEMO 304 de rindra)
+  const fill = async (who, code) => {
+    const list = (await who("GET", "/api/v1/teacher/grading/courses?year=" + encodeURIComponent(YEAR))).json.data.courses.find((c) => c.code === code);
+    const q = `year=${encodeURIComponent(YEAR)}&semester=${list.semester ?? 1}`;
+    const sheet = (await who("GET", `/api/v1/teacher/grading/courses/${list.id}/sheet?${q}`)).json.data;
+    for (const l of sheet.lines) {
+      for (const c of sheet.components.filter((x) => x.weight > 0)) {
+        if (!l.statut_special && l.values[String(c.slot)] == null) await who("PUT", `/api/v1/teacher/grading/courses/${list.id}/cells/${l.student_id}`, { year: YEAR, semester: list.semester ?? 1, field: `c${c.slot}`, value: 14 });
+      }
+    }
+    return (await who("POST", `/api/v1/teacher/grading/courses/${list.id}/submit`, { year: YEAR, semester: list.semester ?? 1 })).status;
+  };
+  const t1 = await apiAs("enseignant.demo", PASSWORD);
+  const t2 = await apiAs("rindra", "rindra2026");
+  const s1 = await fill(t1, "DEMO 301");
+  const s2 = await fill(t2, "DEMO 304");
+  check("(préparation) deux feuilles complètes sont transmises (DEMO 301 et DEMO 304)", s1 === 200 && s2 === 200, `${s1}/${s2}`);
+
+  await go("/login/");
+  await type("#identifier", "registraire.demo");
+  await type("#password", PASSWORD);
+  await submit();
+  await until("location.pathname === '/' && /Validation des notes/.test(document.body.innerText)", "accueil registrariat (groupée)");
+  await click("a[href='/validations/']");
+  await until("/DEMO 301/.test(document.body.innerText) && /DEMO 304/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "file de validation (groupée)", 25000);
+  await sleep(500);
+  const boxes = await ev("document.querySelectorAll('main li input[type=checkbox]').length");
+  check("chaque feuille prête de l'onglet « À valider » a une case à cocher nommée", boxes >= 2 && (await ev("[...document.querySelectorAll('main li input[type=checkbox]')].every(i => /Sélectionner DEMO/.test(i.closest('label').innerText))")), String(boxes));
+  check("rien n'est coché au départ : « Valider la sélection » est inactif", await ev("[...document.querySelectorAll('main button')].find(b => /Valider la sélection/.test(b.innerText))?.disabled === true"));
+  await shot("07v-validation-groupee-vide");
+
+  await clickBtn(/Tout sélectionner/);
+  check("« Tout sélectionner » coche toutes les feuilles prêtes et l'annonce", await until(`document.querySelectorAll('main li input[type=checkbox]:checked').length === ${boxes} && /${boxes}\\s+sélectionnées/.test(document.body.innerText)`, "tout sélectionné"));
+  await shot("07w-validation-groupee-selection");
+  const ids = JSON.parse(await ev("JSON.stringify([...document.querySelectorAll('main li a[href*=\"/validations/feuille/\"]')].map(a => Number(new URL(a.href).searchParams.get('id'))))"));
+
+  // --- valider puis ANNULER dans le délai
+  await clickBtn(/Valider la sélection/);
+  check("« Valider la sélection » ouvre un compte à rebours commun, avec « Annuler la validation »", await until("/Validation de\\s+\\d+\\s+feuilles\\s+dans\\s+\\d+\\s+s/.test(document.body.innerText) && !![...document.querySelectorAll('main button')].find(b => /Annuler la validation/.test(b.innerText))", "compte à rebours groupé"));
+  const during = await Promise.all(ids.map((id) => pageApi(`/api/v1/review/remises/${id}`)));
+  check("pendant le délai : une demande en attente par feuille, AUCUNE note écrite, cases verrouillées", during.every((r) => r.d.pending !== null && r.d.lines.every((l) => l.current_grade === null || l.current_grade === "")) && await ev("[...document.querySelectorAll('main li input[type=checkbox]')].every(i => i.disabled)"), JSON.stringify(during.map((r) => [r.s, r.d.status, r.d.pending, r.d.lines.map((l) => l.current_grade)])));
+  await shot("07x-validation-groupee-compte-a-rebours");
+  await sleep(1200);
+  await clickBtn(/Annuler la validation/);
+  check("« Annuler » dit qu'aucune note n'a été écrite", await until("/Validation annulée/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '') && /aucune note n’a été écrite/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '')", "annulation groupée"));
+  const undone = await serverStateB(async () => Promise.all(ids.map((id) => pageApi(`/api/v1/review/remises/${id}`))), (rs) => rs.every((r) => r.d.pending === null));
+  check("côté serveur : plus aucune demande, feuilles toujours « soumises », aucune note", undone.every((r) => r.d.pending === null && r.d.status === "soumise" && r.d.lines.every((l) => l.current_grade === null || l.current_grade === "")), JSON.stringify(undone.map((r) => [r.d.status, r.d.pending, r.d.lines.map((l) => l.current_grade)])));
+  await sleep(11000);
+  check("même après plus de 10 s, rien ne s'est validé tout seul", (await Promise.all(ids.map((id) => pageApi(`/api/v1/review/remises/${id}`)))).every((r) => r.d.status === "soumise"));
+  check("la sélection est vidée et les cases sont de nouveau actives", await until("document.querySelectorAll('main li input[type=checkbox]:checked').length === 0 && [...document.querySelectorAll('main li input[type=checkbox]')].every(i => !i.disabled)", "cases réactivées"));
+
+  // --- valider pour de bon
+  await clickBtn(/Tout sélectionner/);
+  await until(`document.querySelectorAll('main li input[type=checkbox]:checked').length === ${boxes}`, "re-sélection");
+  await clickBtn(/Valider la sélection/);
+  await until("/Validation de\\s+\\d+\\s+feuilles\\s+dans\\s+\\d+\\s+s/.test(document.body.innerText)", "second compte à rebours groupé");
+  check("à la fin du délai, l'écran termine : « 2 feuilles validées »", await until(`/${boxes}\\s+feuilles\\s+validées/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '')`, "validation groupée", 45000));
+  const done = await serverStateB(async () => Promise.all(ids.map((id) => pageApi(`/api/v1/review/remises/${id}`))), (rs) => rs.every((r) => r.d.status === "validee"));
+  check("côté serveur : toutes les feuilles sont validées, les notes ÉCRITES dans le bulletin, plus de demande en attente", done.every((r) => r.d.status === "validee" && r.d.pending === null && r.d.lines.some((l) => l.current_grade !== null && l.current_grade !== "")), JSON.stringify(done.map((r) => r.d.status)));
+  const rindra = done.find((r) => r.d.course.code === "DEMO 304");
+  check("DEMO 304 : les 3 étudiants ont leur note (14) en base", !!rindra && rindra.d.lines.length === 3 && rindra.d.lines.every((l) => Number(l.current_grade) === 14), rindra ? JSON.stringify(rindra.d.lines.map((l) => l.current_grade)) : "absente");
+  check("la file n'a plus de feuille à valider et la barre disparaît", await until("!document.querySelector('main li input[type=checkbox]') && ![...document.querySelectorAll('main button')].some(b => /Valider la sélection/.test(b.innerText))", "file vidée"));
+  await shot("07y-validation-groupee-terminee");
+
+  // --- les droits
+  const t403 = await t1("POST", "/api/v1/review/remises/bulk/approve", { ids });
+  check("un enseignant ne peut pas valider en groupe, même en appelant l'API (403)", t403.status === 403, String(t403.status));
+
+  const layG = JSON.parse(await ev(`JSON.stringify({ scroll: document.documentElement.scrollWidth, inner: innerWidth, h1: document.querySelectorAll('h1').length, sansNom: [...document.querySelectorAll('a,button,summary')].filter(e => !(e.getAttribute('aria-label') || e.innerText.trim())).length, sansEtiquette: [...document.querySelectorAll('main input, main select, main textarea')].filter(e => !e.labels?.length && !e.getAttribute('aria-label')).length })`));
+  check("file de validation : aucun défilement horizontal, contrôles nommés, chaque case étiquetée", layG.scroll <= layG.inner && layG.sansNom === 0 && layG.sansEtiquette === 0, JSON.stringify(layG));
+  await ev("document.querySelector('button[aria-label^=\"Se déconnecter\"]').click()");
+  check("déconnexion du registrariat (groupée)", await until("location.pathname.startsWith('/login')", "déconnexion registrariat (groupée)"));
+}
+
+console.log(String.fromCharCode(10) + "7g. Registrariat : tableau de bord, menu « Plus », listes (étudiants, cours, enseignants) et fiches");
+{
+  const API = "http://localhost:8000";
+  const apiAs = async (pseudo, password) => {
+    const jar = {};
+    const take = (res) => { for (const c of res.headers.getSetCookie?.() ?? []) { const [kv] = c.split(";"); const i = kv.indexOf("="); jar[kv.slice(0, i)] = kv.slice(i + 1); } };
+    const base = { Origin: WEB, Referer: WEB + "/", Accept: "application/json" };
+    take(await fetch(API + "/api/v1/auth/csrf", { headers: base }));
+    const call = async (method, p, body) => {
+      const res = await fetch(API + p, { method, headers: { ...base, "Content-Type": "application/json", Cookie: Object.entries(jar).map(([k, v]) => `${k}=${v}`).join("; "), "X-XSRF-TOKEN": decodeURIComponent(jar["XSRF-TOKEN"] ?? "") }, body: body ? JSON.stringify(body) : undefined });
+      take(res);
+      return { status: res.status, json: await res.json().catch(() => null) };
+    };
+    await call("POST", "/api/v1/auth/login", { identifier: pseudo, password });
+    return call;
+  };
+  const pageApi = (p) => ev(`fetch('${API}${p}', { credentials: 'include', headers: { Accept: 'application/json' } }).then(async r => JSON.stringify({ s: r.status, d: (await r.json()).data }))`).then(JSON.parse);
+  const listReady = (label) => until("!document.querySelector('[aria-busy=true]') && !!document.querySelector('main ul li a[href*=\"/fiche/\"]') || /ne correspond/.test(document.body.innerText)", label, 25000);
+  const search = async (q) => {
+    await ev(`(() => { const e = document.querySelector('input[type=search]'); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(e, ${JSON.stringify(q)}); e.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+    await sleep(900);
+  };
+  const lay = async () => JSON.parse(await ev(`JSON.stringify({ scroll: document.documentElement.scrollWidth, inner: innerWidth, h1: document.querySelectorAll('h1').length, sansNom: [...document.querySelectorAll('a,button,summary')].filter(e => !(e.getAttribute('aria-label') || e.innerText.trim())).length, sansEtiquette: [...document.querySelectorAll('main input:not([type=checkbox]), main select')].filter(e => !e.labels?.length && !e.getAttribute('aria-label')).length })`));
+
+  await go("/login/");
+  await type("#identifier", "registraire.demo");
+  await type("#password", PASSWORD);
+  await submit();
+
+  // --- tableau de bord
+  await until("location.pathname === '/' && /À traiter/.test(document.body.innerText) && /Chiffres clés/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "tableau de bord", 25000);
+  const board = (await pageApi("/api/v1/staff/dashboard")).d;
+  const home = await text();
+  check("le tableau de bord montre « À traiter » avec les éléments du serveur (signalements, candidatures…) et leur nombre", board.to_do.length >= 2 && board.to_do.every((i) => new RegExp(`${i.count}\\s+[^\\n]+`).test(home)) && /signalements? d’absences/.test(home) && /nouvelles? candidatures?/.test(home), home.slice(0, 200).replace(/\n/g, " "));
+  check("« Chiffres clés » : l'année en cours, les inscrits et le sélecteur d'année", new RegExp(`Inscrits ${board.year.replace(" - ", "-")}`).test(home) && (await ev("!!document.querySelector('main select')")) && /Nouveaux étudiants/.test(home));
+  await shot("07z-tableau-de-bord");
+  const homeLay = await lay();
+  check("accueil du registrariat : aucun défilement horizontal, un seul h1, contrôles nommés", homeLay.scroll <= homeLay.inner && homeLay.h1 === 1 && homeLay.sansNom === 0 && homeLay.sansEtiquette === 0, JSON.stringify(homeLay));
+
+  // --- menu : 5 places au plus sur téléphone, le reste sous « Plus »
+  const nav = await ev("[...document.querySelectorAll('nav.fixed a')].map(a => a.textContent.trim())");
+  check("barre du bas : 5 entrées au plus (Accueil, Validations, Assiduité, Étudiants, Plus)", JSON.stringify(nav) === JSON.stringify(["Accueil", "Validations", "Assiduité", "Étudiants", "Plus"]), JSON.stringify(nav));
+  await click("nav.fixed a[href='/plus/']");
+  await until("location.pathname === '/plus/' && /Candidatures/.test(document.body.innerText)", "page Plus (personnel)");
+  const plus = await text();
+  check("« Plus » range les pages qui ne tiennent pas : Cours, Enseignants, Candidatures, chacune avec sa description", /Cours/.test(plus) && /Enseignants/.test(plus) && /Candidatures/.test(plus) && /Instruire les candidatures/.test(plus), plus.slice(0, 160).replace(/\n/g, " "));
+  check("sur « Plus », l'onglet « Plus » reste allumé", await ev("document.querySelector('nav.fixed a[href=\"/plus/\"]').getAttribute('aria-current') === 'page'"));
+  await shot("07za-plus-personnel");
+
+  // --- étudiants : recherche, filtre, tri, fiche, retour
+  await click("nav.fixed a[href='/etudiants/']");
+  await listReady("liste des étudiants");
+  const total0 = (await pageApi("/api/v1/staff/lists/students")).d.total;
+  check("liste des étudiants : le nombre vient du serveur et chaque ligne mène à une fiche", new RegExp(`${total0.toLocaleString("fr-FR").replace(/ /g, "\\s")}\\s+étudiants`).test(await text()) && (await ev("document.querySelectorAll('main ul li a[href*=\"/etudiants/fiche/\"]').length")) >= 4);
+  check("le bouton « Nouvel étudiant » est proposé au registrariat", await ev("[...document.querySelectorAll('main a')].some(a => /Nouvel étudiant/.test(a.innerText) && a.getAttribute('href') === '/etudiants/nouveau/')"));
+  await search("Andrianina");
+  check("rechercher « Andrianina » ne garde que les étudiants qui le portent (DEMO-0101)", await until("/DEMO-0101/.test(document.body.innerText) && !/DEMO-0102/.test(document.body.innerText) && /1 étudiant correspond/.test(document.body.innerText)", "recherche Rakoto"), (await text()).slice(0, 120).replace(/\n/g, " "));
+  await shot("07zb-liste-etudiants-recherche");
+  await search("");
+  await until("/DEMO-0102/.test(document.body.innerText)", "recherche effacée");
+  await ev("[...document.querySelectorAll('main button')].find(b => /^Filtres/.test(b.innerText.trim())).click()");
+  await until("!!document.querySelector('#filtres')", "panneau de filtres");
+  const gestion = await ev("(() => { const l = [...document.querySelectorAll('#filtres label')].find(x => /^Gestion/.test(x.innerText.trim())); if (!l) return false; l.querySelector('input').click(); return true; })()");
+  check("filtrer par mention « Gestion » (le nombre de chaque option est affiché) ne garde que ses étudiants, avec une pastille retirable", gestion && await until("/DEMO-0105/.test(document.body.innerText) && /DEMO-0106/.test(document.body.innerText) && !/DEMO-0101/.test(document.body.innerText) && !!document.querySelector('[aria-label^=\"Retirer le filtre Mention\"]')", "filtre mention"));
+  check("le parcours ne s'ouvre qu'une fois la mention choisie (ses parcours apparaissent)", await ev("[...document.querySelectorAll('#filtres fieldset')].some(f => /Parcours/.test(f.innerText) && /Gestion générale/.test(f.innerText))"));
+  await shot("07zc-liste-etudiants-filtre");
+  await ev("document.querySelector('[aria-label^=\"Retirer le filtre Mention\"]').click()");
+  check("retirer la pastille rétablit la liste complète", await until("/DEMO-0101/.test(document.body.innerText) && /DEMO-0105/.test(document.body.innerText)", "filtre retiré"));
+  await ev("(() => { const s = [...document.querySelectorAll('main select')].find(x => /Matricule/.test(x.innerText)); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, 'matricule'); s.dispatchEvent(new Event('change', { bubbles: true })); })()");
+  check("trier par « Matricule » : le premier de la liste est le plus petit matricule", await until("(() => { const ids = [...document.querySelectorAll('main ul li a .font-mono')].map(e => e.innerText.trim()); return ids.length > 3 && ids[0] === [...ids].sort()[0]; })()", "tri par matricule"));
+  await search("Andrianina");
+  await until("/1 étudiant correspond/.test(document.body.innerText)", "recherche avant fiche");
+  await click("main ul li a[href*='/etudiants/fiche/']");
+  await until("location.pathname === '/etudiants/fiche/' && /Fiche en lecture seule/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "fiche étudiant", 25000);
+  const fiche = await text();
+  check("fiche étudiant : identité, études et inscriptions, en lecture seule", /DEMO-0101/.test(fiche) && /ANDRIANINA Lalaina/.test(fiche) && /Études/.test(fiche) && /Informatique/.test(fiche) && /Inscriptions aux cours/.test(fiche) && /Fiche en lecture seule/.test(fiche));
+  check("la fiche ne montre ni mot de passe, ni CIN, ni visa, ni famille, ni garant", !/mot de passe|CIN|visa|Père|Mère|sponsor|garant/i.test(fiche));
+  await shot("07zd-fiche-etudiant");
+  const idFiche = Number(new URL(await ev("location.href")).searchParams.get("id"));
+  await click("main a[href='/etudiants/']");
+  check("revenir à la liste retrouve la recherche (« Andrianina ») gardée le temps de la session", await until("document.querySelector('input[type=search]')?.value === 'Andrianina' && /1 étudiant correspond/.test(document.body.innerText)", "recherche gardée"));
+  const l1 = await lay();
+  check("liste des étudiants : aucun défilement horizontal, un seul h1, contrôles nommés, champ étiqueté", l1.scroll <= l1.inner && l1.h1 === 1 && l1.sansNom === 0 && l1.sansEtiquette === 0, JSON.stringify(l1));
+
+  // --- cours (via « Plus »), puis fiche du cours et de son enseignant
+  await click("nav.fixed a[href='/plus/']");
+  await until("location.pathname === '/plus/'", "plus");
+  await click("main a[href='/cours/']");
+  await listReady("liste des cours");
+  await search("Rasolofo");
+  check("rechercher le nom d'un ENSEIGNANT (« Rasolofo ») retrouve ses cours (DEMO 301 et DEMO 302)", await until("/DEMO 301/.test(document.body.innerText) && /DEMO 302/.test(document.body.innerText) && !/DEMO 303/.test(document.body.innerText)", "recherche enseignant"));
+  const courseRow = await ev("[...document.querySelectorAll('main ul li')].find(li => /DEMO 301/.test(li.innerText)).innerText.replace(/\\n/g, ' ')");
+  check("une ligne de cours montre sigle, intitulé, mention, niveau, crédits et enseignant", /Systèmes d’exploitation/.test(courseRow) && /Licence 2/.test(courseRow) && /3 crédits/.test(courseRow) && /HASINA Rasolofo|Hasina Rasolofo|RASOLOFO/i.test(courseRow), courseRow.slice(0, 160));
+  await shot("07ze-liste-cours");
+  await ev("[...document.querySelectorAll('main ul li a')].find(a => /DEMO 301/.test(a.innerText)).click()");
+  await until("location.pathname === '/cours/fiche/' && /Enseignant/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "fiche cours", 25000);
+  check("fiche cours : le cours, son enseignant (lien) et ses étudiants inscrits par année", /DEMO 301/.test(await text()) && /Étudiants inscrits/.test(await text()) && (await ev("!!document.querySelector('main a[href*=\"/enseignants/fiche/\"]')")));
+  await click("main a[href*='/enseignants/fiche/']");
+  await until("location.pathname === '/enseignants/fiche/' && /Cours \\(\\d+\\)/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "fiche enseignant", 25000);
+  const prof = await text();
+  check("fiche enseignant : coordonnées, fonction et la liste de ses cours (avec lien vers chaque fiche)", /Coordonnées/.test(prof) && /DEMO 301/.test(prof) && /DEMO 302/.test(prof) && (await ev("!!document.querySelector('main a[href*=\"/cours/fiche/\"]')")));
+  check("la fiche enseignant ne montre ni groupe sanguin, ni religion, ni date de naissance", !/sanguin|Religion|Adventiste|naissance/i.test(prof));
+  await shot("07zf-fiche-enseignant");
+
+  // --- enseignants
+  await go("/enseignants/");
+  await listReady("liste des enseignants");
+  await search("Hasina");
+  check("liste des enseignants : la recherche retrouve « Hasina Rasolofo »", await until("/Hasina|HASINA/.test(document.body.innerText) && /1 enseignant correspond/.test(document.body.innerText)", "recherche enseignant"));
+  const l2 = await lay();
+  check("liste des enseignants : aucun défilement horizontal, un seul h1, contrôles nommés", l2.scroll <= l2.inner && l2.h1 === 1 && l2.sansNom === 0 && l2.sansEtiquette === 0, JSON.stringify(l2));
+
+  await ev("document.querySelector('button[aria-label^=\"Se déconnecter\"]').click()");
+  check("déconnexion du registrariat (listes)", await until("location.pathname.startsWith('/login')", "déconnexion listes"));
+
+  // --- les droits : un enseignant n'entre dans aucune liste, même par l'API
+  const t1 = await apiAs("enseignant.demo", PASSWORD);
+  const rights = [await t1("GET", "/api/v1/staff/lists/students"), await t1("GET", "/api/v1/staff/lists/courses"), await t1("GET", "/api/v1/staff/lists/teachers"), await t1("GET", `/api/v1/staff/students/${idFiche}`), await t1("GET", "/api/v1/staff/dashboard"), await t1("GET", "/api/v1/staff/applications")];
+  check("un enseignant ne peut lire ni les listes, ni une fiche, ni le tableau de bord, ni les candidatures, même en appelant l'API (403)", rights.every((r) => r.status === 403), rights.map((r) => r.status).join("/"));
+  await type("#identifier", "enseignant.demo");
+  await type("#password", PASSWORD);
+  await submit();
+  await until("location.pathname === '/' && /Présence/.test(document.body.innerText)", "accueil enseignant (listes)");
+  await go("/etudiants/");
+  check("la page « /etudiants/ » est expliquée à un enseignant : réservée au personnel, aucune donnée", await until("/réservée au personnel/.test(document.body.innerText)", "page étudiants réservée") && !/DEMO-0101/.test(await text()));
+  await go("/cours/");
+  check("la page « /cours/ » est expliquée à un enseignant : réservée au registrariat", await until("/réservée au registrariat/.test(document.body.innerText)", "page cours réservée"));
+  await ev("document.querySelector('button[aria-label^=\"Se déconnecter\"]').click()");
+  check("déconnexion de l'enseignant (listes)", await until("location.pathname.startsWith('/login')", "déconnexion enseignant (listes)"));
+}
+
+console.log(String.fromCharCode(10) + "7h. Registrariat : candidatures (instruction, messages au candidat, archives) et création d'un étudiant");
+{
+  const API = "http://localhost:8000";
+  const apiAs = async (pseudo, password) => {
+    const jar = {};
+    const take = (res) => { for (const c of res.headers.getSetCookie?.() ?? []) { const [kv] = c.split(";"); const i = kv.indexOf("="); jar[kv.slice(0, i)] = kv.slice(i + 1); } };
+    const base = { Origin: WEB, Referer: WEB + "/", Accept: "application/json" };
+    take(await fetch(API + "/api/v1/auth/csrf", { headers: base }));
+    const call = async (method, p, body) => {
+      const res = await fetch(API + p, { method, headers: { ...base, "Content-Type": "application/json", Cookie: Object.entries(jar).map(([k, v]) => `${k}=${v}`).join("; "), "X-XSRF-TOKEN": decodeURIComponent(jar["XSRF-TOKEN"] ?? "") }, body: body ? JSON.stringify(body) : undefined });
+      take(res);
+      return { status: res.status, json: await res.json().catch(() => null) };
+    };
+    await call("POST", "/api/v1/auth/login", { identifier: pseudo, password });
+    return call;
+  };
+  const staff = await apiAs("registraire.demo", PASSWORD);
+  const serverApps = async (status = "") => (await staff("GET", "/api/v1/staff/applications" + (status ? `?status=${status}` : ""))).json.data;
+  const byName = (data, name) => (data.rows ?? data).find((r) => r.name === name);
+  const serverState = async (read, ok) => { let last; for (let i = 0; i < 60; i++) { last = await read(); if (ok(last)) return last; await sleep(250); } return last; };
+  const runCommand = (name) => execFileSync(process.env.PHP_BIN ?? "php", ["artisan", name], { cwd: join(import.meta.dirname, "..", "..", "api"), env: { ...process.env }, encoding: "utf8" });
+  const setInput = (sel, v) => ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(e, ${JSON.stringify(v)}); e.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+  const setSelect = (sel, v) => ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(e, ${JSON.stringify(v)}); e.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  const clickBtn = (re) => ev(`(() => { const b = [...document.querySelectorAll('main button')].find(x => ${re}.test(x.innerText)); if (!b || b.disabled) return false; b.click(); return true; })()`);
+  const next = async () => { await ev("document.querySelector('form button[type=submit]').click()"); await sleep(350); };
+  const lay = async () => JSON.parse(await ev(`JSON.stringify({ scroll: document.documentElement.scrollWidth, inner: innerWidth, h1: document.querySelectorAll('h1').length, sansNom: [...document.querySelectorAll('a,button,summary')].filter(e => !(e.getAttribute('aria-label') || e.innerText.trim())).length, sansEtiquette: [...document.querySelectorAll('main input:not([type=checkbox]), main select')].filter(e => !e.labels?.length && !e.getAttribute('aria-label')).length })`));
+
+  await go("/login/");
+  await type("#identifier", "registraire.demo");
+  await type("#password", PASSWORD);
+  await submit();
+  await until("location.pathname === '/'", "accueil (candidatures)");
+
+  // --- liste des candidatures
+  await go("/candidatures/");
+  await until("!document.querySelector('[aria-busy=true]') && /Demo Nouvelle Candidate/.test(document.body.innerText)", "liste des candidatures", 25000);
+  const apps0 = await serverApps();
+  const tabs = await ev("[...document.querySelectorAll('[role=tab]')].map(t => t.innerText.replace(/\\s+/g, ' ').trim())");
+  check("les onglets de statut portent leurs compteurs (les archives en sont exclues)", tabs.some((t) => new RegExp(`^Toutes ${apps0.total}$`).test(t)) && tabs.some((t) => new RegExp(`^Nouveau ${apps0.counts.nouveau}$`).test(t)) && tabs.some((t) => new RegExp(`^Archivées ${apps0.archived}$`).test(t)), JSON.stringify(tabs));
+  check("l'en-tête dit combien de candidatures sont nouvelles", new RegExp(`${apps0.counts.nouveau} nouvelles?`).test(await text()));
+  await shot("07zg-candidatures");
+
+  // --- instruire : accepter une candidature (les messages partent APRÈS, par tâche)
+  await ev("[...document.querySelectorAll('main ul li a')].find(a => /Demo Nouvelle Candidate/.test(a.innerText)).click()");
+  await until("location.pathname === '/candidatures/fiche/' && /Instruction/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "fiche candidature", 25000);
+  const idNew = Number(new URL(await ev("location.href")).searchParams.get("id"));
+  check("la fiche montre l'instruction : les autres statuts possibles, jamais « converti »", await ev("[...document.querySelectorAll('main button')].some(b => /Accepter/.test(b.innerText)) && [...document.querySelectorAll('main button')].some(b => /Refuser/.test(b.innerText)) && ![...document.querySelectorAll('main button')].some(b => /onverti/.test(b.innerText))"));
+  await clickBtn(/^Accepter$/);
+  await until("!!document.querySelector('[role=group][aria-label^=\"Confirmer\"]')", "confirmation");
+  const confirmText = await ev("document.querySelector('[role=group][aria-label^=\"Confirmer\"]').innerText.replace(/\\s+/g, ' ')");
+  check("« Accepter » demande confirmation et dit qui sera prévenu : courriel ET SMS, avec les coordonnées", /Le candidat en sera informé/.test(confirmText) && /Courriel à demo\.nouvelle\.candidate@demo\.test/.test(confirmText) && /SMS au 034 12 345 67/.test(confirmText), confirmText);
+  await shot("07zh-confirmation-acceptation");
+  await clickBtn(/Confirmer/);
+  check("la décision est enregistrée tout de suite : « le candidat sera prévenu dans la minute »", await until("/Décision enregistrée/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '') && /dans la minute/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '')", "toast décision"));
+  const queued = await serverState(async () => byName(await serverApps(), "Demo Nouvelle Candidate"), (r) => r.status === "accepte" && r.notifications.length === 2);
+  check("côté serveur : statut « accepté », deux tâches (courriel, SMS) EN ATTENTE : rien n'est parti pendant la requête", queued.status === "accepte" && queued.notifications.every((n) => n.state === "en_attente") && !queued.notified_email_at && !queued.notified_sms_at, JSON.stringify(queued.notifications.map((n) => n.state)));
+  check("la page montre « en cours d'envoi » pour chaque message", await until("/Courriel en cours d’envoi/.test(document.body.innerText) && /SMS en cours d’envoi/.test(document.body.innerText)", "envoi en cours"));
+  const out = runCommand("applications:notify");
+  check("la commande planifiée envoie les deux messages (journal du courriel, journal des SMS)", /envoyés : 2/.test(out), out.trim());
+  const sent = await serverApps().then((a) => byName(a, "Demo Nouvelle Candidate"));
+  check("côté serveur : les tâches sont « envoyées » et les dates de notification posées", sent.notifications.every((n) => n.state === "envoyee") && !!sent.notified_email_at && !!sent.notified_sms_at);
+  await go(`/candidatures/fiche/?id=${idNew}`);
+  check("la fiche rouverte dit « Courriel envoyé » et « SMS envoyé »", await until("/Courriel envoyé/.test(document.body.innerText) && /SMS envoyé/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "messages envoyés", 25000));
+  check("une candidature acceptée propose « Créer l'étudiant »", (await ev("!!document.querySelector('main a[href=\"/etudiants/nouveau/?candidature=' + new URL(location.href).searchParams.get('id') + '\"]')")));
+  await shot("07zi-candidature-acceptee");
+
+  // --- un candidat sans coordonnées : la confirmation le dit, et la décision part sans message
+  await go("/candidatures/");
+  await until("/Demo Sansmoyen Contact/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "liste (sans coordonnées)");
+  await ev("[...document.querySelectorAll('main ul li a')].find(a => /Demo Sansmoyen Contact/.test(a.innerText)).click()");
+  await until("location.pathname === '/candidatures/fiche/' && /Instruction/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "fiche sans coordonnées", 25000);
+  await clickBtn(/^Refuser$/);
+  await until("!!document.querySelector('[role=group][aria-label^=\"Confirmer\"]')", "confirmation (refus)");
+  const confirm2 = await ev("document.querySelector('[role=group][aria-label^=\"Confirmer\"]').innerText.replace(/\\s+/g, ' ')");
+  check("la confirmation d'un refus dit pourquoi aucun message ne partira (pas d'adresse, numéro inexploitable)", /le candidat n’a pas laissé d’adresse/.test(confirm2) && /numéro inexploitable/.test(confirm2), confirm2);
+  await clickBtn(/Confirmer/);
+  check("sans message à envoyer : « Statut mis à jour » (et pas « le candidat sera prévenu »)", await until("/Statut mis à jour/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '')", "toast statut"));
+  const nobody = byName(await serverApps(), "Demo Sansmoyen Contact");
+  check("côté serveur : refusé, deux tâches « ignorées » avec leur raison", nobody.status === "refuse" && nobody.notifications.every((n) => n.state === "ignoree" && !!n.reason), JSON.stringify(nobody.notifications.map((n) => n.state)));
+
+  // --- archiver une candidature (le statut ne change pas)
+  await go("/candidatures/");
+  await until("/Demo Encours Candidat/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "liste (archiver)");
+  await ev("[...document.querySelectorAll('main ul li a')].find(a => /Demo Encours Candidat/.test(a.innerText)).click()");
+  await until("location.pathname === '/candidatures/fiche/' && /Instruction/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "fiche en cours", 25000);
+  await clickBtn(/^Archiver$/);
+  check("archiver confirme par un message", await until("/Candidature archivée/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '')", "toast archive"));
+  const arch = byName((await serverApps("archive")).rows, "Demo Encours Candidat");
+  check("côté serveur : rangée dans les archives, le statut « en cours » est inchangé", !!arch && arch.status === "en_cours" && !!arch.archived_at);
+
+  // --- création d'un étudiant depuis la candidature acceptée (Licence)
+  await go("/candidatures/");
+  await until("/Demo Acceptee Licence/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "liste (création)");
+  await ev("[...document.querySelectorAll('main ul li a')].find(a => /Demo Acceptee Licence/.test(a.innerText)).click()");
+  await until("location.pathname === '/candidatures/fiche/' && /Créer l’étudiant/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "fiche acceptée", 25000);
+  await ev("[...document.querySelectorAll('main a')].find(a => /Créer l’étudiant/.test(a.innerText)).click()");
+  await until("location.pathname === '/etudiants/nouveau/' && /Étape 1 sur 4/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "formulaire de création", 25000);
+  check("depuis une candidature, le formulaire est pré-rempli (nom, naissance, nationalité…) sans son e-mail personnel", await ev("document.querySelector('#f-last_name').value === 'Acceptee' && document.querySelector('#f-first_name').value === 'Licence' && document.querySelector('#f-birth_date').value === '2005-03-12' && document.querySelector('#f-nationality').value === 'Malagasy'") && /Depuis la candidature de/.test(await text()) && (await ev("document.querySelector('#f-email').value")) === "");
+  await shot("07zj-creation-etape1");
+
+  // validation : la région manque
+  await next();
+  check("« Suivant » sans région : le champ est signalé et reçoit le focus", await until("/Choisissez la région/.test(document.body.innerText) && document.activeElement?.id === 'f-region'", "région obligatoire"));
+  await setSelect("#f-region", await ev("[...document.querySelectorAll('#f-region option')].find(o => /Vakinankaratra/.test(o.textContent)).value"));
+  await next();
+  await until("/Étape 2 sur 4/.test(document.body.innerText)", "étape 2");
+  check("étape études : mention et parcours repris de la candidature, matricule et adresse PROPOSÉS libres", await until("document.querySelector('#f-mention').value === 'INFO' && document.querySelector('#f-track').value === 'Réseaux' && /^\\d{5}$/.test(document.querySelector('#f-student_id').value)", "matricule proposé", 20000));
+  const proposedId = await ev("document.querySelector('#f-student_id').value");
+  await shot("07zk-creation-etape2");
+  await next();
+  await until("/Étape 3 sur 4/.test(document.body.innerText)", "étape 3");
+  check("étape famille : père, mère et garant repris de la candidature", (await ev("document.querySelector('#f-father_name').value")) === "Papa Demo" && (await ev("document.querySelector('#f-mother_name').value")) === "Maman Demo" && (await ev("document.querySelector('#f-sponsor_last_name').value")) === "Oncle Demo");
+  await next();
+  await until("/Étape 4 sur 4/.test(document.body.innerText) && /Récapitulatif/.test(document.body.innerText)", "récapitulatif");
+  const recap = await text();
+  check("le récapitulatif dit ce qui sera attribué (matricule, adresse) et que le mot de passe n'est affiché qu'une fois", new RegExp(proposedId).test(recap) && /mot de passe initial aléatoire/.test(recap) && /Acceptee/i.test(recap));
+  await shot("07zl-creation-recapitulatif");
+  // double clic : un seul étudiant
+  await ev("(() => { const b = document.querySelector('form button[type=submit]'); b.click(); setTimeout(() => b.click(), 30); })()");
+  check("« Créer l'étudiant » : le compte rendu donne matricule, adresse universitaire et mot de passe initial (une fois)", await until("/Étudiant créé/.test(document.body.innerText) && /Mot de passe initial/.test(document.body.innerText)", "création réussie", 30000));
+  const done = await text();
+  const newId = (done.match(/Matricule\s+(\d+[A-Z]*)/) ?? [])[1];
+  const pwd = await ev("document.querySelector('code')?.innerText ?? ''");
+  check("le mot de passe initial est aléatoire (12 caractères sans ambiguïté), pas l'ancien « 1234Student2027 »", /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)[A-HJ-NP-Za-km-z2-9]{12}$/.test(pwd) && !/Student/.test(pwd), pwd.replace(/./g, "•"));
+  check("le matricule attribué est celui qui était proposé, et l'adresse universitaire est dérivée du nom", newId === proposedId && /acceptee\.[a-z0-9]+@zurcher\.edu\.mg/.test(done), done.slice(0, 140).replace(/\n/g, " "));
+  check("le compte Google n'est pas créé pendant la requête : son état est annoncé (ici non configuré)", /Compte Google/.test(done) && /pas configurée|en cours de création|créé/.test(done));
+  check("la candidature est convertie et rangée dans les archives", /convertie et rangée dans les archives/.test(done));
+  await shot("07zm-creation-reussie");
+  const idCreated = await ev("Number(new URL([...document.querySelectorAll('main a')].find(a => /Ouvrir la fiche/.test(a.innerText)).href).searchParams.get('id'))");
+  const list = (await staff("GET", `/api/v1/staff/lists/students?q=${newId}`)).json.data;
+  check("côté serveur : UN seul étudiant créé malgré le double clic, avec ce matricule", list.total === 1 && list.rows[0].student_id === newId, `total ${list.total}`);
+  const conv = byName((await serverApps("archive")).rows, "Demo Acceptee Licence");
+  check("côté serveur : la candidature est « convertie », archivée, liée au matricule", !!conv && conv.status === "converti" && conv.student_id === newId && !!conv.archived_at);
+  const lic = (await staff("GET", `/api/v1/staff/students/${idCreated}`)).json.data;
+  check("la fiche créée porte la mention, le niveau et l'année choisis (Licence 1, Informatique)", lic.mention === "Informatique" && lic.level === 1 && lic.student_id === newId && lic.is_new === true && !JSON.stringify(lic).match(/password|motdepasse/i));
+  await click("main a[href*='/etudiants/fiche/']");
+  await until("location.pathname === '/etudiants/fiche/' && /Fiche en lecture seule/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "fiche créée", 25000);
+  check("la fiche créée ne montre jamais le mot de passe", !(await text()).includes(pwd));
+
+  // une candidature déjà convertie n'ouvre plus le formulaire : elle renvoie à l'étudiant
+  await go(`/etudiants/nouveau/?candidature=${conv.id}`);
+  check("rouvrir une candidature convertie explique « Cet étudiant est déjà créé » et pointe vers la fiche (pas de formulaire)", await until("/Cet étudiant est déjà créé/.test(document.body.innerText) && /Ouvrir la fiche de l’étudiant/.test(document.body.innerText) && !document.querySelector('form')", "candidature convertie"));
+  await go(`/etudiants/nouveau/?candidature=${nobody.id}`);
+  check("une candidature refusée n'ouvre pas de formulaire : « Candidature non acceptée », avec le retour aux candidatures", await until("/Candidature non acceptée/.test(document.body.innerText) && /a été refusée/.test(document.body.innerText) && !document.querySelector('form')", "candidature refusée"));
+
+  // --- Master : la création pose le courriel avec l'adresse et le mot de passe (envoyé par la tâche)
+  const master = byName(await serverApps(), "Demo Acceptee Master");
+  const pre = (await staff("GET", `/api/v1/staff/student-creation/from-application/${master.id}`)).json.data;
+  check("candidat de Master : le formulaire s'ouvre au niveau Master 1 (« is_master »)", pre.level === 4 && pre.is_master === true);
+  const mastersBefore = (await staff("GET", `/api/v1/staff/applications/${master.id}`)).json.data;
+  check("avant la création, l'acceptation d'un candidat de Master n'a envoyé AUCUN courriel (il partira avec l'adresse et le mot de passe)", mastersBefore.status === "accepte" && !mastersBefore.notified_email_at);
+  const token = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+  const opts = (await staff("GET", "/api/v1/staff/student-creation/options")).json.data;
+  const masterPayload = {
+    token, application_id: master.id, last_name: "Testcreation", first_name: "Master Zo", sex: 1, birth_date: "1998-06-02", birth_place: "Antsirabe", nationality: "Malagasy", origin_country: "Madagascar",
+    marital_status: "Célibataire", religion: "Adventiste", children: 0, region: opts.regions[0].id, address: "Lot 5", mention: "INFO", track: "Réseaux", level: 4,
+    academic_year: "2026 - 2027", status: "Externe", previous_degree: "Licence en informatique", previous_degree_date: "2025-09-01",
+  };
+  const createdMaster = await staff("POST", "/api/v1/staff/students", masterPayload);
+  check("créer l'étudiant de Master depuis sa candidature (API) : 201, avec le mot de passe rendu une fois", createdMaster.status === 201 && !!createdMaster.json?.data?.initial_password, `${createdMaster.status} ${JSON.stringify(createdMaster.json)?.slice(0, 160)}`);
+  const mt = (await staff("GET", `/api/v1/staff/applications/${master.id}`)).json.data;
+  check("côté serveur : candidature convertie, tâche « identifiants » EN ATTENTE (le courriel part par la tâche, après le compte Google)", mt.status === "converti" && mt.notifications.some((n) => n.decision === "identifiants" && n.state === "en_attente"), JSON.stringify(mt.notifications));
+  const out2 = runCommand("applications:notify");
+  check("la tâche planifiée envoie le courriel d'acceptation du Master", /envoyés : 1/.test(out2), out2.trim());
+  const mt2 = (await staff("GET", `/api/v1/staff/applications/${master.id}`)).json.data;
+  check("côté serveur : « Courriel d'acceptation avec l'adresse et le mot de passe » envoyé", mt2.notifications.some((n) => n.decision === "identifiants" && n.state === "envoyee") && !!mt2.notified_email_at);
+  const again = await staff("POST", "/api/v1/staff/students", masterPayload);
+  check("rejouer la même demande (même jeton) ne crée rien : 200, « already », et le mot de passe n'est plus rendu", again.status === 200 && again.json.data.already === true && again.json.data.initial_password === null && again.json.data.student_id === createdMaster.json.data.student_id);
+  const dupe = (await staff("GET", "/api/v1/staff/lists/students?q=Testcreation")).json.data;
+  check("côté serveur : un seul étudiant « Testcreation » de Master", dupe.rows.filter((r) => r.first_name === "Master Zo").length === 1);
+
+  // --- création libre (sans candidature) : validation, brouillon, création
+  await go("/etudiants/nouveau/");
+  await until("/Étape 1 sur 4/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "formulaire libre", 25000);
+  await next();
+  check("« Suivant » sur un formulaire vide : chaque champ manquant est signalé avec son message, le premier prend le focus", await until("/Indiquez le nom/.test(document.body.innerText) && /Indiquez le prénom/.test(document.body.innerText) && /Choisissez la région/.test(document.body.innerText) && document.activeElement?.id === 'f-last_name'", "erreurs de validation"));
+  await shot("07zn-creation-erreurs");
+  await type("#f-last_name", "Testcreation");
+  await sleep(300);
+  await go("/etudiants/nouveau/");
+  await until("/Étape 1 sur 4/.test(document.body.innerText) && !document.querySelector('[aria-busy=true]')", "formulaire rouvert");
+  check("le brouillon est gardé sur l'appareil : la page rechargée retrouve le nom saisi", await until("document.querySelector('#f-last_name')?.value === 'Testcreation'", "brouillon repris"));
+  await type("#f-first_name", "Libre Zo");
+  await setInput("#f-birth_date", "2004-05-20");
+  await type("#f-birth_place", "Antsirabe");
+  await setSelect("#f-region", await ev("[...document.querySelectorAll('#f-region option')].find(o => /Analamanga/.test(o.textContent)).value"));
+  await type("#f-address", "Lot 7 Antananarivo");
+  await next();
+  await until("/Étape 2 sur 4/.test(document.body.innerText)", "étape 2 (libre)");
+  await next();
+  check("étape études : sans mention ni parcours, « Suivant » les signale", await until("/Choisissez la mention/.test(document.body.innerText) && /Choisissez le parcours/.test(document.body.innerText)", "mention obligatoire"));
+  const mentionsOffered = await ev("[...document.querySelectorAll('#f-mention option')].map(o => o.textContent.trim())");
+  check("les mentions proposées sont les OUVERTES : « Éducation » (fermée) n'est pas offerte", mentionsOffered.includes("Informatique") && mentionsOffered.includes("Gestion") && !mentionsOffered.some((m) => /Éducation/.test(m)), JSON.stringify(mentionsOffered));
+  await setSelect("#f-mention", "INFO");
+  await sleep(500);
+  const tracks1 = await ev("[...document.querySelectorAll('#f-track option')].map(o => o.textContent.trim())");
+  check("les parcours proposés sont ceux de la mention pour la licence (pas « Intelligence artificielle », réservé au master)", tracks1.includes("Réseaux") && tracks1.includes("Développement") && !tracks1.includes("Intelligence artificielle"), JSON.stringify(tracks1));
+  await setSelect("#f-level", "4");
+  await sleep(300);
+  const tracks2 = await ev("[...document.querySelectorAll('#f-track option')].map(o => o.textContent.trim())");
+  check("en Master 1, la liste suit le niveau : « Intelligence artificielle » apparaît, « Développement » disparaît (et le choix précédent est vidé)", tracks2.includes("Intelligence artificielle") && !tracks2.includes("Développement") && (await ev("document.querySelector('#f-track').value")) === "");
+  check("en master, le diplôme précédent remplace le baccalauréat", /Diplôme précédent/.test(await text()) && !/Baccalauréat obtenu/.test(await text()));
+  await setSelect("#f-level", "1");
+  await sleep(300);
+  await setSelect("#f-track", "Développement");
+  check("le matricule est proposé dès que la mention est choisie (5 chiffres de la plage Informatique, 30000 ou plus)", await until("/^3\\d{4}$/.test(document.querySelector('#f-student_id').value)", "matricule proposé (libre)", 20000));
+  await next();
+  await until("/Étape 3 sur 4/.test(document.body.innerText)", "étape 3 (libre)");
+  await next();
+  await until("/Étape 4 sur 4/.test(document.body.innerText) && /Récapitulatif/.test(document.body.innerText)", "récapitulatif (libre)");
+  await ev("document.querySelector('form button[type=submit]').click()");
+  check("création libre : étudiant créé", await until("/Étudiant créé/.test(document.body.innerText)", "création libre", 30000));
+  const free = (await text()).match(/Matricule\s+(\d+)/)?.[1];
+  const lf = (await staff("GET", `/api/v1/staff/lists/students?q=${free}`)).json.data;
+  check("côté serveur : l'étudiant « Testcreation » existe, en Licence 1, parcours Développement", lf.total === 1 && lf.rows[0].last_name === "Testcreation" && lf.rows[0].track === "Développement" && lf.rows[0].level === 1);
+  check("après une création réussie, le brouillon est effacé (un formulaire neuf repart vide)", await ev("sessionStorage.getItem('registrar:creation-draft')") === null);
+  await ev("[...document.querySelectorAll('main button')].find(b => /Créer un autre étudiant/.test(b.innerText)).click()");
+  check("« Créer un autre étudiant » ouvre un formulaire vierge", await until("/Étape 1 sur 4/.test(document.body.innerText) && document.querySelector('#f-last_name')?.value === ''", "formulaire vierge"));
+  const l3 = await lay();
+  check("formulaire de création : aucun défilement horizontal, un seul h1, contrôles nommés, chaque champ étiqueté", l3.scroll <= l3.inner && l3.h1 === 1 && l3.sansNom === 0 && l3.sansEtiquette === 0, JSON.stringify(l3));
+
+  await ev("document.querySelector('button[aria-label^=\"Se déconnecter\"]').click()");
+  check("déconnexion du registrariat (candidatures)", await until("location.pathname.startsWith('/login')", "déconnexion candidatures"));
+
+  // --- les droits : un enseignant ne crée rien et ne voit aucune candidature, même par l'API
+  const t2 = await apiAs("enseignant.demo", PASSWORD);
+  const r403 = [await t2("POST", "/api/v1/staff/applications/" + idNew + "/status", { status: "refuse" }), await t2("POST", "/api/v1/staff/students", { token }), await t2("GET", "/api/v1/staff/student-creation/options")];
+  check("un enseignant ne peut ni instruire une candidature, ni créer un étudiant, ni lire les choix du formulaire (403)", r403.every((r) => r.status === 403), r403.map((r) => r.status).join("/"));
+}
+
+console.log("\n7i. Finance : autorisation de réinscription");
+{
+  const API = "http://localhost:8000";
+  const apiAs = async (pseudo, password) => {
+    const jar = {};
+    const take = (res) => { for (const c of res.headers.getSetCookie?.() ?? []) { const [kv] = c.split(";"); const i = kv.indexOf("="); jar[kv.slice(0, i)] = kv.slice(i + 1); } };
+    const base = { Origin: WEB, Referer: WEB + "/", Accept: "application/json" };
+    take(await fetch(API + "/api/v1/auth/csrf", { headers: base }));
+    const call = async (method, p, body) => {
+      const res = await fetch(API + p, { method, headers: { ...base, "Content-Type": "application/json", Cookie: Object.entries(jar).map(([k, v]) => `${k}=${v}`).join("; "), "X-XSRF-TOKEN": decodeURIComponent(jar["XSRF-TOKEN"] ?? "") }, body: body ? JSON.stringify(body) : undefined });
+      take(res);
+      return { status: res.status, json: await res.json().catch(() => null) };
+    };
+    await call("POST", "/api/v1/auth/login", { identifier: pseudo, password });
+    return call;
+  };
+  const BASE = "/api/v1/staff/finance/reenrolment";
+  const loginAs = async (pseudo) => {
+    await go("/login/");
+    await type("#identifier", pseudo);
+    await type("#password", PASSWORD);
+    await submit();
+    await until("location.pathname === '/'", "accueil " + pseudo);
+  };
+  const open = async () => {
+    await go("/finance/reinscription/");
+    await until("!document.querySelector('[aria-busy=true]') && !!document.querySelector('[aria-label=\"Filtrer par état\"] button')", "page réinscription", 25000);
+  };
+  const tiles = async () => JSON.parse(await ev(`JSON.stringify([...document.querySelectorAll('[aria-label="Filtrer par état"] button')].map(b => ({ n: Number(b.firstElementChild.innerText.replace(/\\D/g, '')), on: b.getAttribute('aria-pressed') === 'true', label: b.innerText.replace(/\\s+/g, ' ').trim() })))`));
+  const rowsOf = async () => JSON.parse(await ev(`JSON.stringify([...document.querySelectorAll('main ul.grid.gap-2 > li')].map(li => ({ id: li.querySelector('p.font-mono')?.innerText.trim(), state: li.querySelector('p.font-mono')?.nextElementSibling?.innerText.trim(), sw: [...li.querySelectorAll('[role=switch]')].map(b => ({ label: b.getAttribute('aria-label'), on: b.getAttribute('aria-checked') === 'true' })) })))`));
+  const search = async (q) => {
+    await ev("(() => { const e = document.querySelector('input[type=search]'); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(e, " + JSON.stringify(q) + "); e.dispatchEvent(new Event('input', { bubbles: true })); })()");
+    await sleep(700);
+    await until("!document.querySelector('main ul.grid.gap-2.opacity-60')", "liste filtrée");
+  };
+  const rowButton = (id, sel) => ev(`(() => { const li = [...document.querySelectorAll('main ul.grid.gap-2 > li')].find(l => l.querySelector('p.font-mono')?.innerText.trim() === ${JSON.stringify(id)}); const b = li?.querySelector(${JSON.stringify(sel)}); if (!b) return false; b.click(); return true; })()`);
+  const lay = async () => JSON.parse(await ev(`JSON.stringify({ scroll: document.documentElement.scrollWidth, inner: innerWidth, h1: document.querySelectorAll('h1').length, sansNom: [...document.querySelectorAll('a,button,input,select')].filter(e => !(e.getAttribute('aria-label') || e.innerText?.trim() || e.labels?.length || e.getAttribute('placeholder'))).length })`));
+  const flagsOf = async (call, matricule) => (await call("GET", BASE + "?q=" + matricule)).json.data.rows.find((r) => r.student_id === matricule);
+
+  // ------------------------------------------------------------------ le registraire : sa colonne seulement
+  await loginAs("registraire.demo");
+  const reg = await apiAs("registraire.demo", PASSWORD);
+  const s0 = (await reg("GET", BASE)).json.data;
+  await open();
+  const t0 = await tiles();
+  check("les cinq compteurs (tous, prêts, attente caisse, attente dossier, aucun) sont ceux du serveur et totalisent l'effectif",
+    t0.length === 5 && t0[0].n === s0.stats.total && t0[1].n === s0.stats.prets && t0[2].n === s0.stats.attente_caisse && t0[3].n === s0.stats.attente_dossier && t0[4].n === s0.stats.aucun && t0[1].n + t0[2].n + t0[3].n + t0[4].n === t0[0].n, JSON.stringify(t0.map((t) => t.n)));
+  const rights = await ev("document.querySelector('[aria-label=\"Vos droits sur cette page\"]')?.innerText.replace(/\\s+/g, ' ')");
+  check("le registraire voit ses droits en tête : dossier modifiable, caisse en lecture seule", /Dossier : modifiable/.test(rights) && /Caisse : lecture seule/.test(rights), rights);
+  await go("/plus/");
+  check("sur téléphone, « Réinscription » est rangée sous « Plus » et reliée à la page", await until("[...document.querySelectorAll('main a')].some(a => /Réinscription/.test(a.innerText) && a.getAttribute('href') === '/finance/reinscription/')", "lien Plus → Réinscription"));
+  await open();
+  await search("DEMO-01");
+
+  const r0 = await rowsOf();
+  check("la recherche « DEMO-01 » garde les étudiants de démonstration (au moins les six premiers) ; chacun a son interrupteur « dossier » et AUCUN interrupteur « caisse »",
+    r0.length >= 6 && r0.every((r) => r.sw.length === 1 && /^Dossier validé/.test(r.sw[0].label)), JSON.stringify(r0.map((r) => r.id + ":" + r.sw.length)));
+  const byId = Object.fromEntries(r0.map((r) => [r.id, r]));
+  check("états de départ : 0101 prêt, 0102 attend le dossier, 0103 attend la caisse, les autres n'ont rien",
+    /Prêts/.test(byId["DEMO-0101"].state) && /dossier/.test(byId["DEMO-0102"].state) && /caisse/.test(byId["DEMO-0103"].state) && /Ni l/.test(byId["DEMO-0104"].state), JSON.stringify(r0.map((r) => r.state)));
+  check("0101 et 0103 ont leur dossier validé, 0102 non", byId["DEMO-0101"].sw[0].on && byId["DEMO-0103"].sw[0].on && !byId["DEMO-0102"].sw[0].on);
+  check("la trace « qui · quand » est affichée sous l'interrupteur déjà posé", /Ancien Demo · \d{2}\/\d{2}\/\d{4}/.test(await ev("document.body.innerText")) || /Registraire Demo · \d{2}\/\d{2}\/\d{4}/.test(await ev("document.body.innerText")));
+  await shot("07zi-reinscription-registraire");
+
+  // --- un clic : le dossier de 0102 est validé, l'étudiant devient « prêt », les compteurs suivent
+  await rowButton("DEMO-0102", "[role=switch]");
+  check("l'interrupteur passe à « validé » et l'étudiant devient « prêt »", await until("(() => { const li = [...document.querySelectorAll('main ul.grid.gap-2 > li')].find(l => l.querySelector('p.font-mono')?.innerText.trim() === 'DEMO-0102'); return li?.querySelector('[role=switch]')?.getAttribute('aria-checked') === 'true' && /Prêts/.test(li.innerText) && !li.querySelector('[role=switch][aria-busy=true]'); })()", "bascule 0102", 15000));
+  await until("/Dossier validé/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '')", "toast dossier validé", 8000);
+  const f1 = await flagsOf(reg, "DEMO-0102");
+  check("le serveur a enregistré : dossier validé par « Registraire Demo », étudiant « prêt »", f1.file.value === true && f1.file.by === "Registraire Demo" && f1.state === "prets", JSON.stringify(f1.file));
+  const t1 = await tiles();
+  check("les compteurs ont suivi sans recharger : un « prêt » de plus, un « attente du dossier » de moins, total inchangé", t1[1].n === t0[1].n + 1 && t1[3].n === t0[3].n - 1 && t1[0].n === t0[0].n, JSON.stringify(t1.map((t) => t.n)));
+  const again = await reg("PUT", BASE + "/students/" + f1.id + "/file", { value: true });
+  check("rejouer la même valeur ne change rien (idempotent) : l'auteur et la date d'origine restent", again.status === 200 && again.json.data.changed === false && again.json.data.row.file.at === f1.file.at);
+
+  // --- ce que le registraire ne peut PAS faire, même par l'API
+  const denied = await reg("PUT", BASE + "/students/" + f1.id + "/authorization", { value: true });
+  const deniedBulk = await reg("POST", BASE + "/bulk", { field: "authorization", value: true, ids: [f1.id] });
+  const deniedReset = await reg("POST", BASE + "/reset", { columns: ["file"], confirmation: "REINITIALISER" });
+  check("le registraire ne peut ni autoriser (caisse), ni autoriser en groupe, ni réinitialiser, même par l'API (403)", denied.status === 403 && deniedBulk.status === 403 && deniedReset.status === 403, [denied.status, deniedBulk.status, deniedReset.status].join("/"));
+  check("aucun bouton « Tout réinitialiser » pour lui", !(await ev("[...document.querySelectorAll('main button')].some(b => /Tout réinitialiser/.test(b.innerText))")));
+
+  // --- filtrer par état avec les compteurs
+  await ev("[...document.querySelectorAll('[aria-label=\"Filtrer par état\"] button')].find(b => /attente de la caisse/i.test(b.innerText)).click()");
+  await until("[...document.querySelectorAll('[aria-label=\"Filtrer par état\"] button')].some(b => b.getAttribute('aria-pressed') === 'true' && /attente de la caisse/i.test(b.innerText))", "tuile choisie");
+  await sleep(600);
+  await until("!document.querySelector('main ul.grid.gap-2.opacity-60')", "liste filtrée par état");
+  const rS = await rowsOf();
+  check("la tuile « En attente de la caisse » ne laisse que ceux-là (DEMO-0103), qui est le seul de la recherche", rS.length === 1 && rS[0].id === "DEMO-0103", JSON.stringify(rS.map((r) => r.id)));
+  await ev("[...document.querySelectorAll('[aria-label=\"Filtrer par état\"] button')].find(b => /attente de la caisse/i.test(b.innerText)).click()");
+  await sleep(700);
+  await until(`document.querySelectorAll('main ul.grid.gap-2 > li').length === ${r0.length} && !document.querySelector('main ul.grid.gap-2.opacity-60')`, "tous de retour");
+
+  // --- action groupée puis « Annuler »
+  await rowButton("DEMO-0104", "input[type=checkbox]");
+  await rowButton("DEMO-0105", "input[type=checkbox]");
+  check("la barre d'action groupée apparaît et dit « 2 étudiants sélectionnés »", await until("/2 étudiants sélectionnés/.test(document.querySelector('[role=region][aria-label=\"Action groupée\"]')?.innerText ?? '')", "barre groupée"));
+  const barButtons = await ev("[...document.querySelectorAll('[role=region][aria-label=\"Action groupée\"] button')].map(b => b.innerText.trim())");
+  check("le registraire n'a que les actions de sa colonne : « Valider le dossier » et « Retirer la validation »", barButtons.includes("Valider le dossier") && barButtons.includes("Retirer la validation") && !barButtons.includes("Autoriser"), JSON.stringify(barButtons));
+  await ev("[...document.querySelectorAll('[role=region][aria-label=\"Action groupée\"] button')].find(b => b.innerText.trim() === 'Valider le dossier').click()");
+  check("le groupe est appliqué : « 2 dossier(s) validé(s) »", await until("/2 dossier\\(s\\) validé\\(s\\)/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '')", "toast groupé", 12000));
+  const g1 = [await flagsOf(reg, "DEMO-0104"), await flagsOf(reg, "DEMO-0105")];
+  check("côté serveur : les deux dossiers sont validés, le troisième (0106) non", g1.every((r) => r.file.value) && !(await flagsOf(reg, "DEMO-0106")).file.value);
+  await ev("(() => { const b = [...document.querySelectorAll('[data-sonner-toaster] button')].find(x => /Annuler/.test(x.innerText)); b?.click(); })()");
+  check("« Annuler » dans la notification remet les deux dossiers comme avant", await (async () => { for (let i = 0; i < 40; i++) { const a = [await flagsOf(reg, "DEMO-0104"), await flagsOf(reg, "DEMO-0105")]; if (a.every((r) => !r.file.value)) return true; await sleep(250); } return false; })());
+  const l1 = await lay();
+  check("page de réinscription : aucun défilement horizontal, un seul h1, contrôles nommés", l1.scroll <= l1.inner && l1.h1 === 1 && l1.sansNom === 0, JSON.stringify(l1));
+  await ev("document.querySelector('button[aria-label^=\"Se déconnecter\"]').click()");
+  await until("location.pathname.startsWith('/login')", "déconnexion registraire");
+
+  // ------------------------------------------------------------------ la caisse : l'autre colonne
+  await loginAs("ancien.demo");
+  const cash = await apiAs("ancien.demo", PASSWORD);
+  await open();
+  await search("DEMO-01");
+  const rightsC = await ev("document.querySelector('[aria-label=\"Vos droits sur cette page\"]')?.innerText.replace(/\\s+/g, ' ')");
+  check("la caisse voit ses droits : caisse modifiable, dossier en lecture seule", /Caisse : modifiable/.test(rightsC) && /Dossier : lecture seule/.test(rightsC), rightsC);
+  const rC = await rowsOf();
+  check("chaque étudiant n'a que l'interrupteur « Réinscription autorisée »", rC.length === r0.length && rC.every((r) => r.sw.length === 1 && /^Réinscription autorisée/.test(r.sw[0].label)));
+  await rowButton("DEMO-0103", "[role=switch]");
+  check("la caisse autorise DEMO-0103 : il devient « prêt à se réinscrire »", await until("(() => { const li = [...document.querySelectorAll('main ul.grid.gap-2 > li')].find(l => l.querySelector('p.font-mono')?.innerText.trim() === 'DEMO-0103'); return li?.querySelector('[role=switch]')?.getAttribute('aria-checked') === 'true' && /Prêts/.test(li.innerText); })()", "autorisation 0103", 15000));
+  const fc = await flagsOf(cash, "DEMO-0103");
+  check("le serveur a enregistré l'auteur « Ancien Demo » et l'état « prêt »", fc.authorization.value && fc.authorization.by === "Ancien Demo" && fc.state === "prets", JSON.stringify(fc.authorization));
+  const deniedC = [await cash("PUT", BASE + "/students/" + fc.id + "/file", { value: false }), await cash("GET", BASE + "/reset/preview?columns[]=file"), await cash("POST", BASE + "/reset/0123456789abcdef/undo")];
+  check("la caisse ne peut ni toucher au dossier, ni voir l'aperçu de réinitialisation, ni annuler un lot (403)", deniedC.every((r) => r.status === 403), deniedC.map((r) => r.status).join("/"));
+  check("aucun bouton « Tout réinitialiser » pour la caisse", !(await ev("[...document.querySelectorAll('main button')].some(b => /Tout réinitialiser/.test(b.innerText))")));
+  await ev("document.querySelector('button[aria-label^=\"Se déconnecter\"]').click()");
+  await until("location.pathname.startsWith('/login')", "déconnexion caisse");
+
+  // ------------------------------------------------------------------ le superadmin : tout, et la réinitialisation annulable
+  await loginAs("superadmin.demo");
+  const sup = await apiAs("superadmin.demo", PASSWORD);
+  await open();
+  await search("DEMO-01");
+  const rightsS = await ev("document.querySelector('[aria-label=\"Vos droits sur cette page\"]')?.innerText.replace(/\\s+/g, ' ')");
+  check("le superadmin peut tout modifier", /Caisse : modifiable/.test(rightsS) && /Dossier : modifiable/.test(rightsS), rightsS);
+  const rS2 = await rowsOf();
+  check("chaque étudiant a deux interrupteurs (dossier, caisse)", rS2.length === r0.length && rS2.every((r) => r.sw.length === 2));
+  const before = (await sup("GET", BASE)).json.data;
+  check("le bandeau d'annulation n'existe pas tant qu'aucune réinitialisation n'a eu lieu", before.last_batch === null && !(await ev("[...document.querySelectorAll('main [role=status]')].some(s => /Réinitialisation du/.test(s.innerText))")));
+
+  await ev("[...document.querySelectorAll('main button')].find(b => /Tout réinitialiser/.test(b.innerText)).click()");
+  check("la fenêtre « Tout réinitialiser » s'ouvre", await until("document.querySelector('dialog[open]') !== null", "fenêtre ouverte"));
+  const apercu = (await sup("GET", BASE + "/reset/preview?columns[]=authorization&columns[]=file")).json.data;
+  check("la portée affichée est celle du serveur : autorisations, dossiers, étudiants concernés, étudiants qui ne pourront plus se réinscrire",
+    await until(`(() => { const t = document.querySelector('dialog[open] p[aria-live]')?.innerText.replace(/\\D+/g, ' ').trim(); return t === ${JSON.stringify([apercu.by_field.authorization, apercu.by_field.file, apercu.students, apercu.blocked].join(" "))}; })()`, "portée", 12000), JSON.stringify(apercu));
+  check("tant que la phrase n'est pas saisie, « Réinitialiser » reste inactif", await ev("[...document.querySelectorAll('dialog[open] button')].find(b => b.innerText.trim() === 'Réinitialiser').disabled"));
+  await shot("07zi-reinscription-reinitialiser");
+  await type("dialog[open] input:not([type=checkbox])", "oups");
+  check("une mauvaise phrase ne l'active pas", await ev("[...document.querySelectorAll('dialog[open] button')].find(b => b.innerText.trim() === 'Réinitialiser').disabled"));
+  await type("dialog[open] input:not([type=checkbox])", "réinitialiser");
+  check("la bonne phrase (casse et accents tolérés) l'active", await until("![...document.querySelectorAll('dialog[open] button')].find(b => b.innerText.trim() === 'Réinitialiser').disabled", "bouton actif"));
+  await ev("[...document.querySelectorAll('dialog[open] button')].find(b => b.innerText.trim() === 'Réinitialiser').click()");
+  check("la réinitialisation aboutit : fenêtre fermée, bandeau d'annulation affiché", await until("document.querySelector('dialog[open]') === null && [...document.querySelectorAll('main [role=status]')].some(s => /Réinitialisation du/.test(s.innerText))", "bandeau", 20000));
+  const after = (await sup("GET", BASE)).json.data;
+  check("côté serveur : plus personne n'est prêt ni coché (tous « ni l'un ni l'autre »), un lot est annulable", after.stats.aucun === after.stats.total && after.stats.autorises === 0 && after.stats.dossiers_ok === 0 && after.last_batch?.rows === apercu.by_field.authorization + apercu.by_field.file, JSON.stringify(after.stats));
+  const tA = await tiles();
+  check("les compteurs de la page suivent : tout le monde est « ni l'un ni l'autre »", tA[4].n === tA[0].n && tA[1].n === 0);
+  await shot("07zi-reinscription-bandeau");
+
+  // --- annuler : tout revient exactement comme avant
+  await ev("[...document.querySelectorAll('main [role=status] button')].find(b => /Annuler cette réinitialisation/.test(b.innerText)).click()");
+  check("« Annuler cette réinitialisation » fait disparaître le bandeau", await until("![...document.querySelectorAll('main [role=status]')].some(s => /Réinitialisation du/.test(s.innerText))", "bandeau disparu", 20000));
+  const restored = (await sup("GET", BASE)).json.data;
+  check("les compteurs sont exactement ceux d'avant la réinitialisation, et plus aucun lot n'est proposé", JSON.stringify(restored.stats) === JSON.stringify(before.stats) && restored.last_batch === null, JSON.stringify(restored.stats));
+  const f0101 = await flagsOf(sup, "DEMO-0101");
+  check("auteur et date d'origine sont restaurés (DEMO-0101 : « Ancien Demo » pour la caisse, « Registraire Demo » pour le dossier)", f0101.authorization.by === "Ancien Demo" && f0101.file.by === "Registraire Demo" && f0101.state === "prets", JSON.stringify([f0101.authorization.by, f0101.file.by]));
+  const l2 = await lay();
+  check("le superadmin : aucun défilement horizontal, un seul h1, contrôles nommés", l2.scroll <= l2.inner && l2.h1 === 1 && l2.sansNom === 0, JSON.stringify(l2));
+
+  // --- les droits pour un enseignant
+  await ev("document.querySelector('button[aria-label^=\"Se déconnecter\"]').click()");
+  await until("location.pathname.startsWith('/login')", "déconnexion superadmin");
+  // Le frein de connexion (10 essais / 15 min / identifiant) est entamé par les sections précédentes : on le remet à zéro avant de se connecter encore comme enseignant.
+  execFileSync(process.env.PHP_BIN ?? "php", ["artisan", "cache:clear"], { cwd: join(import.meta.dirname, "..", "..", "api"), env: { ...process.env }, encoding: "utf8" });
+  const teacher = await apiAs("enseignant.demo", PASSWORD);
+  const tr = [await teacher("GET", BASE), await teacher("PUT", BASE + "/students/1/file", { value: true }), await teacher("POST", BASE + "/bulk", { field: "file", value: true, ids: [1] })];
+  check("un enseignant n'ouvre ni la liste, ni les bascules, ni l'action groupée (403)", tr.every((r) => r.status === 403), tr.map((r) => r.status).join("/"));
+}
+
+console.log("\n7j. Finance : solde de compte");
+{
+  const API = "http://localhost:8000";
+  const apiAs = async (pseudo, password) => {
+    const jar = {};
+    const take = (res) => { for (const c of res.headers.getSetCookie?.() ?? []) { const [kv] = c.split(";"); const i = kv.indexOf("="); jar[kv.slice(0, i)] = kv.slice(i + 1); } };
+    const base = { Origin: WEB, Referer: WEB + "/", Accept: "application/json" };
+    take(await fetch(API + "/api/v1/auth/csrf", { headers: base }));
+    const call = async (method, p, body) => {
+      const res = await fetch(API + p, { method, headers: { ...base, "Content-Type": "application/json", Cookie: Object.entries(jar).map(([k, v]) => `${k}=${v}`).join("; "), "X-XSRF-TOKEN": decodeURIComponent(jar["XSRF-TOKEN"] ?? "") }, body: body ? JSON.stringify(body) : undefined });
+      take(res);
+      return { status: res.status, json: await res.json().catch(() => null) };
+    };
+    await call("POST", "/api/v1/auth/login", { identifier: pseudo, password });
+    return call;
+  };
+  const BASE = "/api/v1/staff/finance/balances";
+  const reg = await apiAs("registraire.demo", PASSWORD);
+  const sessionId = (await reg("GET", BASE)).json.data.sessions.find((s) => /^Soldes \(démo\)/.test(s.label)).id;
+  const rowsOf = async () => JSON.parse(await ev(`JSON.stringify([...document.querySelectorAll('main ul.grid.gap-2 > li')].map(li => ({ id: li.querySelector('p.font-mono')?.innerText.trim().split(/\\s+/)[0], text: li.innerText.replace(/\\s+/g, ' ').trim(), edit: !!li.querySelector('button[aria-label^="Modifier le solde"]') })))`));
+  const idle = () => until("!document.querySelector('main ul.grid.gap-2.opacity-60') && !document.querySelector('[aria-busy=true]')", "liste prête", 20000);
+  const tiles = async () => JSON.parse(await ev(`JSON.stringify([...document.querySelectorAll('[aria-label="Filtrer par état"] button')].map(b => ({ n: Number(b.firstElementChild.innerText.replace(/\\D/g, '')), on: b.getAttribute('aria-pressed') === 'true', label: b.innerText.replace(/\\s+/g, ' ').trim() })))`));
+  const lay = async () => JSON.parse(await ev(`JSON.stringify({ scroll: document.documentElement.scrollWidth, inner: innerWidth, h1: document.querySelectorAll('h1').length, sansNom: [...document.querySelectorAll('a,button,input,select')].filter(e => !(e.getAttribute('aria-label') || e.innerText?.trim() || e.labels?.length || e.getAttribute('placeholder'))).length })`));
+  const fire = (sel, v, kind = "input") => ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); const proto = e.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype; Object.getOwnPropertyDescriptor(proto, 'value').set.call(e, ${JSON.stringify(v)}); e.dispatchEvent(new Event(${JSON.stringify(kind)}, { bubbles: true })); })()`);
+  const text0 = (s) => s.replace(/ | /g, " ");
+
+  await go("/login/");
+  await type("#identifier", "registraire.demo");
+  await type("#password", PASSWORD);
+  await submit();
+  await until("location.pathname === '/'", "accueil registraire (soldes)");
+  await go("/finance/soldes/");
+  await until("!document.querySelector('[aria-busy=true]') && !!document.querySelector('select')", "page soldes", 25000);
+  await fire("select", String(sessionId), "change");
+  await idle();
+  await sleep(500);
+  await until(`document.querySelector('select').value === '${sessionId}' && document.querySelectorAll('main ul.grid.gap-2 > li').length === 5`, "cinq inscrits", 20000);
+  const r0 = await rowsOf();
+  check("la session « Soldes (démo) » montre ses cinq inscrits, du matricule le plus grand au plus petit", r0.map((r) => r.id).join() === "DEMO-0105,DEMO-0104,DEMO-0103,DEMO-0102,DEMO-0101", r0.map((r) => r.id).join());
+  const t = (id) => text0(r0.find((r) => r.id === id).text);
+  check("les soldes : dette -150 000 Ar (0101), avance +25 000 Ar (0102), nul (0103), calculé 500 000 − 200 000 = -300 000 Ar (0105)",
+    /-150 000 Ar/.test(t("DEMO-0101")) && /\+25 000 Ar/.test(t("DEMO-0102")) && /0 Ar/.test(t("DEMO-0103")) && /-300 000 Ar/.test(t("DEMO-0105")), r0.map((r) => text0(r.text).slice(0, 70)).join(" | "));
+  check("l'étudiant sans ligne finance (0104) est annoncé comme tel et n'a pas de bouton « Modifier »", /Sans ligne finance/.test(t("DEMO-0104")) && !r0.find((r) => r.id === "DEMO-0104").edit && r0.filter((r) => r.edit).length === 4);
+  check("chaque état est dit en mots (jamais par la couleur seule)", /Débitaire/.test(t("DEMO-0101")) && /Créditaire/.test(t("DEMO-0102")) && /Soldé/.test(t("DEMO-0103")));
+  const tl = await tiles();
+  check("compteurs : 2 débitaires, 1 créditaire, 1 soldé, 1 sans ligne", tl.map((x) => x.n).join() === "2,1,1,1", JSON.stringify(tl.map((x) => x.n)));
+  const totals = text0(await ev("document.querySelector('main dl')?.innerText.replace(/\\s+/g, ' ') ?? ''"));
+  check("totaux : dettes -450 000 Ar, avances +25 000 Ar, net -425 000 Ar", /Dettes -450 000 Ar/.test(totals) && /Avances \+25 000 Ar/.test(totals) && /Net -425 000 Ar/.test(totals), totals);
+  await shot("07zj-soldes");
+
+  // --- filtrer et chercher
+  await ev("document.querySelector('[aria-label=\"Filtrer par état\"] button').click()");
+  await idle(); await sleep(400); await idle();
+  const rD = await rowsOf();
+  check("l'état « Débitaire » ne laisse que les deux dettes", rD.map((r) => r.id).sort().join() === "DEMO-0101,DEMO-0105", rD.map((r) => r.id).join());
+  await ev("document.querySelector('[aria-label=\"Filtrer par état\"] button').click()");
+  await idle(); await sleep(400);
+  await fire("input[type=search]", "0102");
+  await sleep(900); await idle();
+  const rQ = await rowsOf();
+  check("la recherche « 0102 » ne garde que cet étudiant", rQ.length === 1 && rQ[0].id === "DEMO-0102", rQ.map((r) => r.id).join());
+  await fire("input[type=search]", "");
+  await sleep(900); await idle();
+
+  // --- corriger un solde
+  await ev("(() => { const li = [...document.querySelectorAll('main ul.grid.gap-2 > li')].find(l => l.querySelector('p.font-mono')?.innerText.trim().startsWith('DEMO-0103')); li.querySelector('button[aria-label^=\"Modifier le solde\"]').click(); })()");
+  check("« Modifier » ouvre le champ avec le solde enregistré", await until("document.querySelector('main form input')?.value === '0'", "éditeur ouvert"));
+  await type("main form input", "abc");
+  check("un montant illisible est refusé sur place : message, « Enregistrer » inactif", await until("!!document.querySelector('main form [role=alert]') && [...document.querySelectorAll('main form button')].find(b => /Enregistrer/.test(b.innerText)).disabled", "saisie invalide"));
+  await type("main form input", "12 500,5");
+  check("un montant lu à la française (espace, virgule) active « Enregistrer »", await until("!document.querySelector('main form [role=alert]') && ![...document.querySelectorAll('main form button')].find(b => /Enregistrer/.test(b.innerText)).disabled", "saisie valide"));
+  await ev("[...document.querySelectorAll('main form button')].find(b => /Enregistrer/.test(b.innerText)).click()");
+  check("l'enregistrement aboutit : « Solde enregistré » et la ligne affiche -12 501 Ar (débitaire)", await until("/Solde enregistré/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '') && !document.querySelector('main form')", "solde enregistré", 20000));
+  await idle();
+  const srv = (await reg("GET", BASE + `?session=${sessionId}&q=DEMO-0103`)).json.data.rows[0];
+  check("le serveur a enregistré 12 500,50 (débitaire, modifiable)", Math.abs(srv.balance - 12500.5) < 0.001 && srv.state === "debitaire" && srv.editable === true, JSON.stringify(srv));
+  await until("document.querySelectorAll('main ul.grid.gap-2 > li').length === 5", "liste rechargée");
+  const rAfter = await rowsOf();
+  check("la ligne affiche le nouveau solde", /-12 501 Ar/.test(text0(rAfter.find((r) => r.id === "DEMO-0103").text)), text0(rAfter.find((r) => r.id === "DEMO-0103").text));
+  const same = await reg("PUT", BASE + `/${sessionId}/103`, { balance: "12500,5" });
+  check("réenregistrer la même valeur n'est pas une erreur : « inchangé »", same.status === 200 && same.json.data.changed === false);
+  const miss = await reg("PUT", BASE + `/${sessionId}/104`, { balance: 5 });
+  const bad = await reg("PUT", BASE + `/${sessionId}/103`, { balance: "beaucoup" });
+  check("une ligne finance absente répond 404 (0104), un montant illisible 422", miss.status === 404 && bad.status === 422, [miss.status, bad.status].join("/"));
+  const l1 = await lay();
+  check("page des soldes : aucun défilement horizontal, un seul h1, contrôles nommés", l1.scroll <= l1.inner && l1.h1 === 1 && l1.sansNom === 0, JSON.stringify(l1));
+  await ev("document.querySelector('button[aria-label^=\"Se déconnecter\"]').click()");
+  await until("location.pathname.startsWith('/login')", "déconnexion registraire (soldes)");
+
+  // --- les droits : la comptabilité (niveau 4) et un enseignant n'y ont pas accès
+  const cash = await apiAs("ancien.demo", PASSWORD);
+  // (un seul compte refusé ici : le frein de connexion de l'enseignant de démonstration, 10 essais par 15 minutes, est déjà largement entamé)
+  const student = await apiAs("etudiant.demo", PASSWORD);
+  const denied = [await student("GET", BASE), await student("PUT", BASE + `/${sessionId}/103`, { balance: 1 }), await student("PUT", BASE + `/${sessionId}/104`, {})];
+  check("un étudiant n'ouvre ni la liste ni la correction, même par l'API (403, avant toute validation)", denied.every((r) => r.status === 403), denied.map((r) => r.status).join("/"));
+  const still = (await reg("GET", BASE + `?session=${sessionId}&q=DEMO-0103`)).json.data.rows[0];
+  check("et le solde n'a pas bougé", Math.abs(still.balance - 12500.5) < 0.001);
+  const cashList = (await cash("GET", BASE + `?session=${sessionId}`)).json.data;
+  check("la comptabilité, elle, lit la liste (5 inscrits) par l'API", cashList.rows.length === 5);
+  await loginAsCash();
+  async function loginAsCash() {
+    await go("/login/");
+    await type("#identifier", "ancien.demo");
+    await type("#password", PASSWORD);
+    await submit();
+    await until("location.pathname === '/'", "accueil comptabilité");
+    await go("/finance/soldes/");
+    await until("!document.querySelector('[aria-busy=true]') && !!document.querySelector('select')", "page soldes comptabilité", 20000);
+    await fire("select", String(sessionId), "change");
+    check("la comptabilité ouvre la page des soldes, choisit la session et voit les boutons « Modifier »", await until("!!document.querySelector('button[aria-label^=\"Modifier le solde\"]')", "boutons Modifier (comptabilité)", 20000));
+    await ev("document.querySelector('button[aria-label^=\"Se déconnecter\"]').click()");
+    await until("location.pathname.startsWith('/login')", "déconnexion comptabilité");
+  }
+}
+
+console.log("\n7k. Finance : échéances de paiement");
+{
+  const API = "http://localhost:8000";
+  const apiAs = async (pseudo, password) => {
+    const jar = {};
+    const take = (res) => { for (const c of res.headers.getSetCookie?.() ?? []) { const [kv] = c.split(";"); const i = kv.indexOf("="); jar[kv.slice(0, i)] = kv.slice(i + 1); } };
+    const base = { Origin: WEB, Referer: WEB + "/", Accept: "application/json" };
+    take(await fetch(API + "/api/v1/auth/csrf", { headers: base }));
+    const call = async (method, p, body) => {
+      const res = await fetch(API + p, { method, headers: { ...base, "Content-Type": "application/json", Cookie: Object.entries(jar).map(([k, v]) => `${k}=${v}`).join("; "), "X-XSRF-TOKEN": decodeURIComponent(jar["XSRF-TOKEN"] ?? "") }, body: body ? JSON.stringify(body) : undefined });
+      take(res);
+      return { status: res.status, json: await res.json().catch(() => null) };
+    };
+    await call("POST", "/api/v1/auth/login", { identifier: pseudo, password });
+    return call;
+  };
+  const BASE = "/api/v1/staff/finance/deadlines";
+  const BAR = '[role=region][aria-label="Enregistrer les échéances"]';
+  const reg = await apiAs("registraire.demo", PASSWORD);
+  const sessionId = (await reg("GET", BASE)).json.data.sessions.find((s) => /^Soldes \(démo\)/.test(s.label)).id;
+  const fire = (sel, v, kind = "input") => ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); const proto = e.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype; Object.getOwnPropertyDescriptor(proto, 'value').set.call(e, ${JSON.stringify(v)}); e.dispatchEvent(new Event(${JSON.stringify(kind)}, { bubbles: true })); })()`);
+  const setDate = (type, rank, value) => ev(`(() => { const card = [...document.querySelectorAll('main form > div')].find(c => c.querySelector('h2')?.innerText.trim() === 'Type ${type}'); const input = card.querySelectorAll('input[type=date]')[${rank - 1}]; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(value)}); input.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+  const hintOf = async (type, rank) => (await ev(`(() => { const card = [...document.querySelectorAll('main form > div')].find(c => c.querySelector('h2')?.innerText.trim() === 'Type ${type}'); return card.querySelectorAll('input[type=date]')[${rank - 1}].closest('label').querySelector('small').innerText.replace(/\\s+/g, ' '); })()`)).replace(/[  ]/g, " ");
+  const lay = async () => JSON.parse(await ev(`JSON.stringify({ scroll: document.documentElement.scrollWidth, inner: innerWidth, h1: document.querySelectorAll('h1').length, sansNom: [...document.querySelectorAll('a,button,input,select')].filter(e => !(e.getAttribute('aria-label') || e.innerText?.trim() || e.labels?.length || e.getAttribute('placeholder'))).length })`));
+  const barText = () => ev(`document.querySelector('${BAR}')?.innerText.replace(/\\s+/g, ' ') ?? ''`);
+  const barClick = (re) => ev(`[...document.querySelectorAll('${BAR} button')].find(b => ${re}.test(b.innerText)).click()`);
+  const saveEnabled = () => ev(`(() => { const b = [...document.querySelectorAll('${BAR} button')].find(x => /Enregistrer/.test(x.innerText)); return !!b && !b.disabled; })()`);
+
+  await go("/login/");
+  await type("#identifier", "registraire.demo");
+  await type("#password", PASSWORD);
+  await submit();
+  await until("location.pathname === '/'", "accueil registraire (échéances)");
+  await go("/finance/echeances/");
+  await until("!document.querySelector('[aria-busy=true]') && !!document.querySelector('select')", "page échéances", 25000);
+  await fire("select", String(sessionId), "change");
+  await until(`document.querySelector('select').value === '${sessionId}' && /Soldes/.test(document.querySelector('select').selectedOptions[0].innerText)`, "session choisie", 20000);
+  await sleep(500);
+  const heads = await ev("[...document.querySelectorAll('main form h2')].map(h => h.innerText.trim())");
+  check("la session affiche les trois types du guichet (A, B, E), jamais les anciens types sans dossier ni date", heads.join() === "Type A,Type B,Type E", heads.join());
+  const info = (await ev("document.querySelector('main').innerText.replace(/\\s+/g, ' ')")).replace(/[  ]/g, " ");
+  check("la période, les inscriptions et l'état sont dits : « 28 sept. 2026 → 12 févr. 2027 », « Aucune inscription », « Échéances à définir »", /28 sept\. 2026 → 12 févr\. 2027/.test(info) && /Aucune inscription pour l.instant/.test(info) && /Échéances à définir/.test(info), info.slice(0, 220));
+  check("sept champs de date : 1 (A) + 2 (B) + 4 (E)", (await ev("document.querySelectorAll('main form input[type=date]').length")) === 7);
+
+  // --- l'ordre des tranches est contrôlé pendant la saisie
+  await setDate("B", 1, "2026-12-11");
+  await setDate("B", 2, "2026-12-11");
+  check("deux tranches à la même date : message « Après la 1re tranche… » et « Enregistrer » inactif", await until(`/Après la 1re tranche/.test(document.querySelector('main').innerText) && (() => { const b = [...document.querySelectorAll('${BAR} button')].find(x => /Enregistrer/.test(x.innerText)); return !!b && b.disabled; })()`, "ordre refusé", 10000));
+  check("la barre compte les erreurs", /à corriger/.test(await barText()), await barText());
+  await setDate("B", 2, "2027-02-12");
+  check("la date corrigée lève l'erreur et réactive « Enregistrer »", await until("!/Après la 1re tranche/.test(document.querySelector('main').innerText)", "erreur levée", 10000) && (await saveEnabled()));
+  const h1 = await hintOf("B", 1);
+  check("le repère dit le jour et la semaine de la session : « Vendredi, 11e semaine de la session »", /Vendredi, 11e semaine de la session/.test(h1), h1);
+  await setDate("A", 1, "2027-03-01");
+  const hA = await hintOf("A", 1);
+  check("une date après la fin de la session est signalée : « 17 jours après la fin de la session »", /17 jours après la fin de la session/.test(hA), hA);
+  await setDate("A", 1, "");
+  check("la barre dit « 2 dates modifiées »", await until(`/2 dates modifiées/.test(document.querySelector('${BAR}')?.innerText ?? '')`, "barre 2 dates", 8000));
+  await shot("07zk-echeances");
+
+  // --- enregistrer
+  await barClick("/Enregistrer/");
+  check("l'enregistrement aboutit : « Échéances enregistrées. »", await until("/Échéances enregistrées/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '')", "toast enregistré", 15000));
+  const srv = (await reg("GET", BASE + `?session=${sessionId}`)).json.data;
+  check("le serveur a les deux dates de B, aucune pour A", srv.dates.B?.["1"] === "2026-12-11" && srv.dates.B?.["2"] === "2027-02-12" && !srv.dates.A && srv.filled === 2, JSON.stringify(srv.dates));
+  check("la barre disparaît et l'état devient « 2 dates sur 7 »", await until(`!document.querySelector('${BAR}') && /2 dates sur 7/.test(document.querySelector('main').innerText)`, "état mis à jour", 15000));
+  check("la liste des sessions n'indique plus « — à définir » pour celle-ci", !/— à définir/.test(await ev("document.querySelector('select').selectedOptions[0].innerText")));
+
+  // --- annuler les changements, retirer une date
+  await setDate("B", 1, "2026-12-18");
+  await until(`/1 date modifiée/.test(document.querySelector('${BAR}')?.innerText ?? '')`, "barre 1 date", 8000);
+  await barClick("/Annuler les changements/");
+  check("« Annuler les changements » remet la date enregistrée et masque la barre", await until(`!document.querySelector('${BAR}')`, "barre masquée", 8000) && (await ev("document.querySelectorAll('main form input[type=date]')[1].value")) === "2026-12-11");
+  await setDate("B", 2, "");
+  await barClick("/Enregistrer/");
+  await until("/Échéances enregistrées/.test(document.querySelector('[data-sonner-toaster]')?.innerText ?? '')", "retrait enregistré", 15000);
+  const after = (await reg("GET", BASE + `?session=${sessionId}`)).json.data;
+  check("vider un champ retire la tranche côté serveur (il ne reste que la 1re tranche de B)", after.dates.B?.["1"] === "2026-12-11" && !after.dates.B?.["2"], JSON.stringify(after.dates));
+  const l1 = await lay();
+  check("page des échéances : aucun défilement horizontal, un seul h1, contrôles nommés", l1.scroll <= l1.inner && l1.h1 === 1 && l1.sansNom === 0, JSON.stringify(l1));
+  await ev("document.querySelector('button[aria-label^=\"Se déconnecter\"]').click()");
+  await until("location.pathname.startsWith('/login')", "déconnexion registraire (échéances)");
+
+  // --- les droits : la comptabilité y accède, un étudiant non
+  const cash = await apiAs("ancien.demo", PASSWORD);
+  const student = await apiAs("etudiant.demo", PASSWORD);
+  const okCash = [await cash("GET", BASE + `?session=${sessionId}`), await cash("PUT", BASE + `/${sessionId}`, { dates: { A: { 1: "2026-12-11" } } })];
+  check("la comptabilité lit et enregistre les échéances (200)", okCash.every((r) => r.status === 200), okCash.map((r) => r.status).join("/"));
+  const denied = [await student("GET", BASE), await student("PUT", BASE + `/${sessionId}`, {})];
+  check("un étudiant n'ouvre ni la liste ni l'enregistrement, même par l'API (403, avant toute validation)", denied.every((r) => r.status === 403), denied.map((r) => r.status).join("/"));
+  const bad = [await reg("PUT", BASE + `/${sessionId}`, { dates: { B: { 1: "2026-12-11", 2: "2026-12-11" } } }), await reg("PUT", BASE + `/${sessionId}`, { dates: { Z: { 1: "2026-12-11" } } }), await reg("PUT", BASE + "/99999999", { dates: {} })];
+  check("côté serveur aussi : ordre refusé (422), type inconnu (422), session inconnue (404)", bad.map((r) => r.status).join("/") === "422/422/404", bad.map((r) => r.status).join("/"));
+}
 
 console.log("\n8. Journal de la console et du réseau");
 check("aucune erreur JavaScript ni requête en échec", problems.length === 0, problems.slice(0, 3).join(" | "));

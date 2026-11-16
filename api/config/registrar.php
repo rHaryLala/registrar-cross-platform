@@ -64,6 +64,38 @@ return [
     ],
 
     /*
+     | Notifications aux candidats (courriel et SMS) : envoyées par la commande planifiée applications:notify.
+     | SMS_PROVIDER : « journal » (par défaut : n'envoie RIEN, écrit le message dans storage/logs/sms.log, comme l'ancienne application) ou « twilio ».
+     | Un mauvais réglage ne doit jamais envoyer de SMS involontaire : sans configuration explicite, rien ne part.
+     */
+    'sms' => [
+        'enabled' => (bool) env('SMS_ENABLED', true),
+        'provider' => env('SMS_PROVIDER', 'journal'),
+        'log_path' => env('SMS_LOG_PATH', ''),       // journal des SMS (vide : storage/logs/sms.log)
+        'twilio_sid' => env('TWILIO_SID', ''),
+        'twilio_token' => env('TWILIO_TOKEN', ''),     // secret : jamais dans le dépôt
+        'twilio_from' => env('TWILIO_FROM', ''),
+    ],
+    /*
+     | Comptes Google Workspace des étudiants (API Google Admin, Directory API) : un compte de service signe son jeton (JWT RS256) et agit au nom d'un
+     | administrateur du domaine (délégation à l'échelle du domaine). SANS la clé (GOOGLE_ADMIN_KEY vide ou illisible), aucun compte n'est créé :
+     | la fiche de l'étudiant dit « compte Google non créé : l'API n'est pas configurée ». La clé n'est JAMAIS dans le dépôt.
+     */
+    'google_admin' => [
+        'key_path' => env('GOOGLE_ADMIN_KEY', ''),
+        'subject' => env('GOOGLE_ADMIN_SUBJECT', 'it@zurcher.edu.mg'),
+        'domain' => env('GOOGLE_ADMIN_DOMAIN', 'zurcher.edu.mg'),
+        'timeout' => 25,
+        'max_attempts' => 3,
+        'retry_minutes' => [1, 5, 30],
+    ],
+    'admissions' => [
+        'contact' => ['email' => 'registrar@zurcher.edu.mg', 'phone' => '+261 34 38 180 81', 'address' => 'Antsampanimahazo, Antsirabe, Madagascar'],
+        'max_attempts' => 3,
+        'retry_minutes' => [1, 5, 30],     // attente avant le 2e, le 3e... essai
+    ],
+
+    /*
      | Durée de la session (minutes). Dix heures, comme l'ancienne application.
      */
     'session_minutes' => 600,

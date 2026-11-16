@@ -18,6 +18,8 @@ export class ApiError extends Error {
     readonly title: string,
     readonly detail?: string,
     readonly fieldErrors?: Record<string, string[]>,
+    /** Champs propres à l'erreur (ex. `target` et `modified_at` d'un conflit de présence). */
+    readonly extra?: Record<string, unknown>,
   ) {
     super(detail ?? title);
     this.name = "ApiError";
@@ -36,6 +38,7 @@ export class ApiError extends Error {
       typeof b.title === "string" ? b.title : "Une erreur est survenue",
       typeof b.detail === "string" ? b.detail : undefined,
       b.errors && typeof b.errors === "object" ? (b.errors as Record<string, string[]>) : undefined,
+      b,
     );
   }
 }

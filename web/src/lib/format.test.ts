@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAr, formatAverage, formatDate, formatDuration, formatGrade, formatLongDate, formatRank, gradeStateChip, maskTail, plural, sessionLabel } from "@/lib/format";
+import { formatAr, formatAverage, formatClock, formatDate, formatDuration, formatGrade, formatLongDate, formatRank, gradeStateChip, maskTail, plural, sessionLabel } from "@/lib/format";
 
 describe("formatGrade", () => {
   it("utilise la virgule décimale française", () => {
@@ -136,5 +136,21 @@ describe("maskTail", () => {
     expect(maskTail("1234")).toBe("••••");
     expect(maskTail("12")).toBe("••");
     expect(maskTail("")).toBe("");
+  });
+});
+
+describe("formatClock", () => {
+  it("écrit minutes et secondes sur deux chiffres", () => {
+    expect(formatClock(0)).toBe("00:00");
+    expect(formatClock(83_000)).toBe("01:23");
+    expect(formatClock(59_999)).toBe("00:59");
+  });
+  it("passe aux heures au-delà de 60 minutes", () => {
+    expect(formatClock(3_723_000)).toBe("1:02:03");
+  });
+  it("ne renvoie jamais de valeur absurde", () => {
+    expect(formatClock(-5)).toBe("00:00");
+    expect(formatClock(Number.NaN)).toBe("00:00");
+    expect(formatClock(Number.POSITIVE_INFINITY)).toBe("00:00");
   });
 });

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { AppShell } from "@/components/app-shell";
 import { StudentHome } from "@/components/student-home";
+import { TeacherHome } from "@/components/teacher-home";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -59,6 +60,7 @@ export function HomeGate() {
   }
 
   if (me.data.role === "student") return <StudentHome user={me.data} />;
+  if (me.data.teacher_space || me.data.review_space || me.data.attendance_space) return <TeacherHome user={me.data} />;
   return <ComingSoon user={me.data} />;
 }
 
