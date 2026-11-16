@@ -51,3 +51,8 @@ Ordre prudent :
 
 - **Aucune migration** (table `finance` de l'ancienne application). Vérifier que la colonne `finance.balance_amount` existe en production (`data/sql_finance_balance_amount.sql` de l'ancien dépôt) : sans elle les soldes sont calculés (total − versements) et la correction est refusée (409).
 - Accès niveaux 1 à 4 : la comptabilité y a accès (l'ancienne page s'arrêtait au niveau 3).
+
+### Échéances de paiement
+
+- **Aucune migration** : table `t_paiement_echeance` de l'ancienne application (`data/migration_paiement_echeances.sql`, rejouable). Elle est aussi lue par la fiche d'inscription de l'espace étudiant : à vérifier en production avant toute mise en ligne.
+- Accès niveaux 1 à 4 (la comptabilité y a accès, l'ancienne page s'arrêtait au niveau 3).
