@@ -1,46 +1,132 @@
-# Registrar UAZ — nouvelle application
+<div align="center">
 
-Refonte de l'application Registrar de l'Université Adventiste Zurcher (`registrar.zurcher.edu.mg`) : web, Android, iOS, Windows et macOS à partir d'une seule application (PWA). L'ancien PHP reste en service pendant toute la migration, sur la **même base de données**.
+<img src="web/public/icons/icon-192.png" alt="Sceau de l'Université Adventiste Zurcher" width="112" height="112">
+
+# Registrar UAZ
+
+**La nouvelle application de l'Université Adventiste Zurcher**<br>
+Web · Android · iOS · Windows · macOS — une seule application (PWA), sur la **même base de données** que l'ancien PHP.
+
+![Laravel](https://img.shields.io/badge/Laravel-13-FF2D20?style=flat-square&logo=laravel&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=flat-square&logo=nextdotjs&logoColor=white)
+![Tailwind](https://img.shields.io/badge/Tailwind-4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)
+![PHP](https://img.shields.io/badge/PHP-8.3-777BB4?style=flat-square&logo=php&logoColor=white)
+![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?style=flat-square&logo=mysql&logoColor=white)
+![PWA](https://img.shields.io/badge/PWA-hors%20ligne-5A0FC8?style=flat-square&logo=pwa&logoColor=white)
+
+![Tests PHP](https://img.shields.io/badge/tests%20PHP-989-1a2b6a?style=flat-square)
+![Tests web](https://img.shields.io/badge/tests%20web-351-1a2b6a?style=flat-square)
+![e2e Chrome](https://img.shields.io/badge/e2e%20Chrome-537%2F537-00c4d4?style=flat-square)
+![Lots](https://img.shields.io/badge/lots-5%20sur%208-00c4d4?style=flat-square)
+
+[Démarrer](#-démarrer-en-5-minutes) ·
+[Architecture](#-architecture) ·
+[Avancement](#-avancement) ·
+[Qui voit quoi](#-qui-voit-quoi) ·
+[Preuves](#-les-preuves) ·
+[Documentation](#-documentation)
+
+</div>
+
+---
+
+## 🧭 En bref
+
+| | |
+|---|---|
+| **Quoi** | Refonte de `registrar.zurcher.edu.mg` : espace étudiant, enseignant, registrariat et finance. |
+| **Comment** | Migration **« strangler »** : l'ancien PHP reste en service, page par page la nouvelle application prend le relais. |
+| **Garde-fou** | Les migrations ne font qu'**ajouter** (jamais de table ni de colonne renommée ou supprimée) : l'ancien code lit toujours les mêmes données. |
+| **Confiance** | Chaque écran est comparé aux **vraies fonctions de l'ancien code** sur une copie des données réelles : voir [les preuves](#-les-preuves). |
+| **Langue** | Interface, messages d'erreur et documentation en français. |
+
+---
+
+## 🏗️ Architecture
+
+```mermaid
+flowchart LR
+    subgraph appareils["📱 💻 Tous les appareils"]
+        pwa["<b>PWA Next.js 16</b><br/>export statique<br/>shadcn · Tailwind 4 · GSAP<br/>TanStack Query"]
+    end
+
+    subgraph laravel["⚙️ Laravel 13"]
+        api["<b>API /api/v1</b><br/>session par cookie (Sanctum)<br/>erreurs RFC 9457"]
+        cron["⏱️ <b>Tâches planifiées</b><br/>schedule:run, chaque minute"]
+    end
+
+    db[("🗄️ <b>MySQL 8.0</b><br/>base partagée")]
+    old["🕰️ <b>Ancien PHP</b><br/>reste en service"]
+    ext["✉️ e-mail · 📱 SMS<br/>Google Admin · zurcher.edu.mg"]
+
+    pwa -- "HTTPS + cookie" --> api
+    api --> db
+    cron --> db
+    cron --> ext
+    old --> db
+
+    classDef nouveau fill:#0a0b0f,stroke:#00c4d4,color:#f2f4f8,stroke-width:2px
+    classDef ancien fill:#f4f5f7,stroke:#98a0b3,color:#1a2b6a,stroke-dasharray:4 3
+    class pwa,api,cron nouveau
+    class old ancien
+```
 
 | Dossier | Contenu |
 |---|---|
-| `api/` | API Laravel 13 (`/api/v1`) sur la base MySQL existante. Session par cookie (Sanctum SPA). |
-| `web/` | Application Next.js 16 en **export statique** (SPA/PWA) : shadcn/ui, Tailwind 4, GSAP, TanStack Query. |
-| `docs/` | Études 01 à 05, schéma de production (structure seule), maquettes. **Lire d'abord** `docs/ETUDE-05-api-et-authentification.md`. |
-| `deploy/` | Exemples de configuration serveur (nginx, PHP-FPM, variables). **Non appliqués, non testés.** |
+| 🧩 [`api/`](api) | API **Laravel 13** (`/api/v1`) sur la base MySQL existante. Session par cookie (Sanctum SPA). |
+| 🖥️ [`web/`](web) | Application **Next.js 16** en **export statique** (SPA/PWA) : shadcn/ui, Tailwind 4, GSAP, TanStack Query. |
+| 📚 [`docs/`](docs) | Études 01 à 05, plan des pages, détail des écrans, schéma de production (structure seule), maquettes. |
+| 🚀 [`deploy/`](deploy) | Exemples de configuration serveur (nginx, PHP-FPM, variables). **Non appliqués, non testés.** |
+| 🛠️ [`tools/`](tools) | Outils (inventaire des routes de l'ancienne application). |
 
-## État
+> **À lire d'abord** : [`docs/ETUDE-05-api-et-authentification.md`](docs/ETUDE-05-api-et-authentification.md).
 
-Trois tranches vérifiées de bout en bout dans un navigateur **et sur une copie de vos vraies données** :
-1. connexion (identifiant + mot de passe, Google côté API) → accueil étudiant → déconnexion ;
-2. **Mes notes** : sessions publiées, moyennes par session et cumulative, notes de promotion, navigation (barre du bas sur téléphone, en-tête sur ordinateur). Parité avec l'ancienne page sur les **180 comptes étudiants actifs** : 0 écart, 0 session masquée exposée.
+---
 
-3. **Mon assiduité** : présences, retards, absences par cours, seuil des 15 % (§472 à §476), séances sans pénalité (§474). Parité avec l'ancien code sur vos **76 étudiants et 94 registres** : 0 écart ; plus 500 scénarios aléatoires comparés champ par champ aux vraies fonctions de l'ancienne application.
+## 🗺️ Avancement
 
-Plan des pages suivantes : [docs/PLAN-PAGES.md](docs/PLAN-PAGES.md) ; inventaire des 127 routes avec leur usage réel : [docs/INVENTAIRE-PAGES.md](docs/INVENTAIRE-PAGES.md) (régénérable : `python tools/inventaire.py`).
-Les autres rôles voient une page d'attente honnête. Non faits : repli enseignant et création de compte étudiant à la première connexion Google, billet de pont vers l'ancien PHP (`legacy-login.php`), « se souvenir de moi », tous les autres écrans (le hors ligne existe pour la présence enseignant : voir plus bas).
+Cinq lots sur huit sont terminés. Plan détaillé : [`docs/PLAN-PAGES.md`](docs/PLAN-PAGES.md) ; inventaire des 127 routes de l'ancienne application avec leur usage réel : [`docs/INVENTAIRE-PAGES.md`](docs/INVENTAIRE-PAGES.md) (régénérable : `python tools/inventaire.py`).
 
-## Prérequis (poste Windows / Laragon)
+| Lot | Domaine | Avancement | État |
+|---|---|---|---|
+| **1** | Connexion, déconnexion, accueil étudiant | `██████████` | ✅ fait |
+| **2** | **Espace étudiant** : notes, présence, inscriptions + fiche PDF, profil, actualités, quiz, jeu | `██████████` | ✅ fait |
+| **3** | **Espace enseignant** : présence (hors ligne), remise de notes à colonnes libres | `█████████░` | 🟢 fait, reste le tableau de bord enseignant |
+| **4** | **Registrariat** : validation des notes, assiduité, listes et fiches, tableau de bord, candidatures, création d'étudiant | `██████████` | ✅ fait |
+| **5** | **Finance** : réinscription, soldes, échéances, barème et frais supplémentaires | `██████████` | ✅ fait |
+| **6** | **Exports et impressions** : vrai PDF serveur pour les documents officiels, XLSX et CSV pour les listes | `░░░░░░░░░░` | 🔜 prochain |
+| **7** | Messagerie, inscriptions au guichet, file d'attente, emploi du temps, outils | `░░░░░░░░░░` | ⏳ à venir |
+| **8** | Les 53 pages **jamais ouvertes** en deux mois | `░░░░░░░░░░` | 💤 restent sur l'ancien PHP |
 
-- PHP **8.3** (`C:\laragon\bin\php\php-8.3.30-…`), pas celui du PATH (8.5, sans `pdo_mysql`). La production est en 8.3.6 : `composer.json` verrouille la plateforme.
-- Composer, Node 24+, MySQL de Laragon.
-- Base de développement `registrar-crossplatform` et base de test `registrar-crossplatform_test` : **structure seule** copiée de la production (`docs/reference/schema-prod-*.sql`). Aucune donnée réelle d'étudiant n'est jamais chargée.
+<details>
+<summary><b>Pas encore fait</b> (hors lots)</summary>
 
-## Bases de données locales (MySQL de Laragon)
+- repli enseignant et création de compte étudiant à la première connexion Google ;
+- billet de pont vers l'ancien PHP (`legacy-login.php`) ;
+- « se souvenir de moi » ;
+- photo à la création d'un étudiant (à ajouter depuis l'ancienne version) ;
+- les écrans des lots 6 à 8 : en attendant, l'ancienne version les sert.
 
-| Base | Contenu | Usage |
-|---|---|---|
-| `registrar-crossplatform` | **Copie locale de la sauvegarde réelle** (stockée hors du dépôt, importée le 14/11/2026) | Développement : se connecter avec ses vrais identifiants |
-| `registrar-crossplatform_demo` | Structure + 4 comptes **fictifs** | Test de bout en bout (`.\start-dev.ps1 -Demo`) |
-| `registrar-crossplatform_test` | Structure seule, vide | Tests PHP (annulés à la fin de chaque test) |
+</details>
 
-- La sauvegarde reste sur `G:` : **elle n'est jamais copiée dans le dépôt** (`.gitignore` écarte aussi `registrar_db.sql`). Les vraies données d'étudiants ne sortent pas de ce poste.
-- **Ne jamais lancer `DemoSeeder` sur la base réelle** (il ajouterait de faux comptes dans votre copie).
-- Les tests PHP refusent de tourner sur une base dont le nom ne finit pas par `_test`.
-- Les serveurs de développement n'écoutent que sur le **bouclage local** (127.0.0.1 / ::1) : la copie des vraies données ne doit jamais être joignable depuis le réseau. Ne pas les relancer avec `--host=0.0.0.0` ni `next dev -H 0.0.0.0`.
-- La production est un serveur **MySQL 8.0.46** (et non MariaDB, erreur corrigée dans l'étude 01).
+---
 
-## Lancer en local
+## 👥 Qui voit quoi
+
+| Profil | Ce qu'il ouvre dans la nouvelle application |
+|---|---|
+| 🎓 **Étudiant** (niveau 8) | Accueil · **Mes notes** · **Ma présence** · **Mes inscriptions** (fiche PDF) · **Mes informations** · Actualités · Quiz · Jeu |
+| 🧑‍🏫 **Enseignant** (7), chef de mention (6), personnel qui enseigne | **Présence** (appel, **hors ligne**) · **Remise de notes** (colonnes libres) |
+| 🗂️ **Registrariat** (niveaux 1 à 3) | Tableau de bord · **Validation des remises** (annulable 10 s) · Étudiants, cours, enseignants · Candidatures · Création d'étudiant · Assiduité (superadmin et registrariat) |
+| 💰 **Finance** | **Réinscription** (niveaux 1, 3, 4) · **Soldes** (1 à 4) · **Échéances** (1 à 4) · **Barème** (1 à 3) |
+
+Niveaux : 1 superadmin · 2 administration · 3 registrariat · 4 comptabilité · 5 media · 6 chef de mention · 7 enseignant · 8 étudiant · 9 Work Education. Les droits sont **revérifiés par le serveur à chaque appel** (403 avant toute validation) : masquer un bouton ne suffit jamais.
+
+Détail, règles et écarts assumés de chaque écran : [`docs/FONCTIONNALITES.md`](docs/FONCTIONNALITES.md).
+
+---
+
+## 🚀 Démarrer en 5 minutes
 
 ```powershell
 .\start-dev.ps1          # base réelle locale ; ouvre 3 fenêtres : API, relais, application
@@ -48,17 +134,57 @@ Les autres rôles voient une page d'attente honnête. Non faits : repli enseigna
 # puis http://localhost:3000
 ```
 
-Connexion par identifiant + mot de passe (Google n'est pas activé en local). **Seuls les comptes étudiants ont un accueil** dans cette première tranche ; les autres rôles (dont superadmin et registrariat) arrivent sur une page « arrive bientôt » qui renvoie vers l'ancienne version.
+Connexion par identifiant + mot de passe (Google n'est pas activé en local).
 
-Lancement manuel (dossier `api/`, PHP 8.3 explicite) : `php artisan serve --host=127.0.0.1 --port=8001`, puis dans `web/` : `node e2e/dev-proxy.mjs` et `NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev`.
+<details>
+<summary><b>Lancement manuel</b></summary>
 
-## Tests
+Dossier `api/`, PHP 8.3 explicite : `php artisan serve --host=127.0.0.1 --port=8001`. Puis dans `web/` : `node e2e/dev-proxy.mjs` et `NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev`.
+
+</details>
+
+### Prérequis (poste Windows / Laragon)
+
+| Outil | Version | Remarque |
+|---|---|---|
+| PHP | **8.3** (`C:\laragon\bin\php\php-8.3.30-…`) | Pas celui du PATH (8.5, sans `pdo_mysql`). La production est en 8.3.6 : `composer.json` verrouille la plateforme. |
+| Composer · Node | Node **24+** | |
+| MySQL | celui de Laragon | La production est un serveur **MySQL 8.0.46** (et non MariaDB, erreur corrigée dans l'étude 01). |
+
+### Trois bases locales
+
+| Base | Contenu | Usage |
+|---|---|---|
+| 🟢 `registrar-crossplatform` | **Copie locale de la sauvegarde réelle** (stockée hors du dépôt, importée le 14/11/2026) | Développement : se connecter avec ses vrais identifiants |
+| 🟡 `registrar-crossplatform_demo` | Structure + comptes **fictifs** | Test de bout en bout (`.\start-dev.ps1 -Demo`) |
+| 🔵 `registrar-crossplatform_test` | Structure seule, vide | Tests PHP (annulés à la fin de chaque test) |
+
+> [!CAUTION]
+> - La sauvegarde reste sur `G:` : **elle n'est jamais copiée dans le dépôt** (`.gitignore` écarte aussi `registrar_db.sql`). Les vraies données d'étudiants ne sortent pas de ce poste.
+> - **Ne jamais lancer `DemoSeeder` sur la base réelle** (il ajouterait de faux comptes dans votre copie).
+> - Les tests PHP refusent de tourner sur une base dont le nom ne finit pas par `_test`.
+> - Les serveurs de développement n'écoutent que sur le **bouclage local** (127.0.0.1 / ::1) : la copie des vraies données ne doit jamais être joignable depuis le réseau. Ne pas les relancer avec `--host=0.0.0.0` ni `next dev -H 0.0.0.0`.
+
+---
+
+## ✅ Tests
+
+| Suite | Nombre | Ce qu'elle couvre |
+|---|---|---|
+| 🐘 **PHP** (`api/`) | **989** | connexion, Google (vraie cryptographie), notes, assiduité, fiches d'inscription, quiz, registrariat, finance, erreurs |
+| ⚛️ **Web** (`web/`) | **351** | client d'API (CSRF, réessai sur 419, hors réseau), formats, calculs, reprise après échec de chargement |
+| 🌐 **e2e Chrome** | **537** vérifications | parcours réels dans un vrai navigateur, dont le téléchargement d'un vrai PDF, la connexion par la fiche, les Actualités et la résolution réelle du Rubik's Cube. Base **de démonstration** uniquement. |
 
 ```bash
-cd api && php artisan test            # 989 tests : connexion, Google (vraie cryptographie), notes, assiduité et fiches d'inscription (parité avec l'ancien code), quiz (score côté serveur, classement), erreurs
-cd web && npm test                    # 351 tests : client d'API (CSRF, réessai sur 419, hors réseau), formats, reprise après échec de chargement
+cd api && php artisan test
+cd web && npm test
 cd web && npm run lint && npx tsc --noEmit
-# De bout en bout (Chrome réel, 537 vérifications, dont le téléchargement d'un vrai PDF, la connexion par la fiche, Actualités et la résolution réelle du Rubik's Cube) : base DE DÉMONSTRATION uniquement
+```
+
+<details>
+<summary><b>Lancer le test de bout en bout (e2e)</b></summary>
+
+```bash
 .\start-dev.ps1 -Demo                 # puis, dans web/ : npm run build (avec NEXT_PUBLIC_API_URL=http://localhost:8000)
 cd web && python -m http.server 3000 -d out   # (à la place de « npm run dev »)
 cd api && php artisan db:seed --class=DemoSeeder   # AVANT chaque passage : remet à zéro le joueur de démonstration du quiz (base _demo seulement)
@@ -68,223 +194,95 @@ cd web && npm run e2e
 
 Pour l'e2e, l'API de démonstration se lance **directement** : depuis `api/public`, `DB_DATABASE=registrar-crossplatform_demo STUDENT_PHOTOS_PATH=…/storage/app/demo-photos ANNOUNCEMENT_IMAGES_PATH=…/storage/app/demo-announcements php -S 127.0.0.1:8001 -t . ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php` (`artisan serve` ne transmet pas `DB_DATABASE` : l'API lirait la base réelle). Le site statique doit écouter en IPv4 ET IPv6 (`python -m http.server 3000 --bind 127.0.0.1` en plus de `--bind ::1`). Passer `DB_DATABASE=registrar-crossplatform_demo` et `PHP_BIN` (PHP 8.3) à `node e2e/smoke.mjs` : les commandes planifiées du test s'exécutent sur cette base. Le script rejoue les `fetch` qui n'atteignent pas le serveur (refus réseau local de Windows) mais pas les réponses HTTP.
 
-## Présence enseignant (registres, appel, hors ligne)
+</details>
 
-Premier lot qui **ÉCRIT** dans les tables de production partagées avec l'ancienne application (`t_presence_*`) : mêmes règles que l'ancien `data/presence.php` / `app/.presence/enregistrer.php`, même journal d'activité.
+---
 
-- **API** (`/api/v1/teacher/…`) : liste des cours de l'année, registre d'un cours, appel d'une séance ; écritures : séances prévues (base des 15 %), ouvrir / modifier / supprimer une séance, pointer un étudiant (présent, retard + minutes, absent, ou effacer), justificatif, « tous présents ». Chaque écriture est un **état voulu** ou **idempotente** (ouvrir deux fois la même séance = la même) : la rejouer ne change rien de plus.
-- **Propriété vérifiée à CHAQUE appel** (lecture comme écriture) : les identifiants de cours se devinent. Un cours d'autrui répond « introuvable », **indiscernable d'un cours inexistant** (404 identique). Le lien compte → fiche enseignant est `teacher_uid` ; à défaut, repli par le nom (dans les deux ordres, l'ancien code le faisait) puis par l'e-mail, **mais seulement s'il désigne UNE fiche** (l'ancien code prenait la première : deux homonymes se partageaient les cours de l'un). Le registrariat (niveaux 1 à 3) peut corriger n'importe quel registre.
-- **Une lecture n'écrit jamais** : le registre (feuille) est créé à la première écriture, la ligne d'un étudiant à son premier pointage.
-- **Règles** (déjà portées côté étudiant, `AttendanceRules`) : la durée du retard décide (< 5 min : à l'heure ; 5 à 9 : retard, deux = une absence ; ≥ 10 : absence) ; > 15 % des séances prévues : **signalement au registrariat** (`t_presence_signalement`, une seule fois par étudiant et par cours, nouveau chiffre jamais réécrit) ; §474 : enseignant arrivé plus de 10 min en retard sans prévenir = séance **sans pénalité**. Modifier la base des 15 % ou les heures d'une séance recalcule **tous** les bilans et signale ceux qui franchissent le seuil sans nouvelle absence. L'écran avertit du §474 **avant** d'ouvrir la séance (« Votre arrivée » vaut l'heure actuelle tant qu'on ne la corrige pas).
-- **Journal d'activité** (`App\Support\AuditTrail`) : chaque écriture laisse une ligne dans `t_audit_requete` + une par modification dans `t_audit_modification`, **au format de l'ancienne app** (avant/après champ par champ, champs sensibles masqués) : la page « Journal d'activité » du registrariat voit les deux. Un échec du journal ne casse jamais l'action ; rien n'est écrit si rien n'a changé ni si l'action est refusée.
-- **Hors ligne** (modèle d'étude 05, §6) : le **serveur fait foi**. Une écriture faite sans réseau part au retour du réseau, **datée de l'instant où l'enseignant l'a faite** (`client_at`, horloge corrigée de celle du serveur) ; si la donnée visée a été modifiée depuis, réponse **409** : rien n'est écrasé, l'enseignant choisit « Appliquer quand même » (`force`) ou « Ignorer ». Plus de 14 jours : refusé (« périmée »). Une séance créée sans réseau a un identifiant provisoire (`@tmp-N` dans les adresses, réécrit à l'envoi) ; file **ordonnée** (numéros d'ordre garantis distincts même pour deux gestes simultanés), un pointage remplace le précédent du même étudiant ; stockage IndexedDB **rangé par compte**, effacé à la déconnexion (confirmation s'il reste des changements non envoyés) ; copies de lecture gardées 14 jours. Envoi automatique : retour du réseau, retour sur l'onglet, toutes les 30 s (Safari/iOS n'a pas de synchronisation en arrière-plan).
-- **Service worker** (`web/public/sw.js`) : garde la **coque** de l'application (pages, scripts, styles) pour la rouvrir et changer de page sans réseau ; **jamais de données** (l'API passe toujours par le réseau). Les pages de l'espace enseignant sont « réchauffées » à la connexion. Production seulement. Servir `/sw.js` avec `Cache-Control: no-cache`.
-- **Tests** : 78 tests PHP (lecture, écritures, signalements, hors ligne, journal) ; 14 mutations sur 56 ont d'abord survécu → tests ajoutés, il ne reste qu'un mutant équivalent. **Parité sur les vraies données locales** : 12 registres, 94 bilans, listes d'inscrits et 329 listes de cours identiques à l'ancien code ; 15 comptes sur 15 résolus pareil. 50 tests web (moteur de file, règles, application optimiste) ; e2e Chrome : appel complet, signalement, §474, **coupure réseau réelle** (service worker compris), conflit « appliquer / ignorer », séance créée sans réseau, purge à la déconnexion.
+## 🔬 Les preuves
 
-## Remise de notes (enseignant) : colonnes libres
+Pour chaque écran repris, la **vraie fonction de l'ancien code** est exécutée sur les données réelles locales (en lecture ; en écriture, sur une copie jetable) et comparée champ par champ à la nouvelle. Une mutation volontaire du code vérifie ensuite que les tests la détectent.
 
-Deuxième écriture dans les tables de production partagées (`t_remise_notes*`). **L'enseignant saisit et transmet ; il n'écrit JAMAIS dans les notes des étudiants** : seule la validation du registrariat le fait (lot 4 ; l'ancienne application assure ce rôle d'ici là).
+| Écran | Ce qui a été comparé | Écarts |
+|---|---|:---:|
+| 🎓 Mes notes | **180** comptes étudiants actifs | **0** |
+| 🎓 Ma présence | **76** étudiants, **94** registres + 500 scénarios aléatoires | **0** |
+| 🎓 Fiche d'inscription | **482** inscriptions visibles (cours, crédits, tranches, total) | **0** |
+| 🧑‍🏫 Présence enseignant | 12 registres, **94** bilans, 329 listes de cours | **0** |
+| 🧑‍🏫 Remise de notes | **31** remises (380 lignes) + **20 000** cas aléatoires | **0** |
+| 🛡️ Validation des remises | **300** scénarios, 403 notes écrites | **0** |
+| ⏰ Assiduité (registrariat) | **94** signalements × 2 années, avec et sans traités | **0** |
+| 📋 Listes et fiches | **420** états aléatoires, **24 667** lignes | **0** |
+| 📬 Candidatures | **77** candidatures : 231 courriels et 231 SMS | **0** |
+| ➕ Création d'étudiant | matricules (156 cas), **814** vérifications d'adresse | **0** |
+| 🔓 Réinscription | **902** vérifications | **0** |
+| ⚖️ Soldes | 15 sessions, 2 249 lignes, **50** saisies rejouées | **0** |
+| 📅 Échéances | **1 683** vérifications, 400 saisies aléatoires | **0** |
+| 🏷️ Barème et frais | **47 088** cases + **12 674** vérifications d'écriture | **0** |
 
-- **Colonnes libres** (demande de l'utilisateur, 15/11/2026) : l'enseignant choisit le **nombre** de colonnes (1 à 12), leur **titre** (40 caractères, uniques) et leur **pondération** ; **seul le total, 100 %, est imposé** (pour transmettre, pas pour enregistrer un brouillon). Une colonne à 0 % est ignorée. On peut renommer, réordonner, ajouter, supprimer (avec ses notes : le nombre de notes perdues est annoncé, et journalisé).
-- **Note sur 20 jamais saisie** : moyenne pondérée des colonnes. Une colonne pondérée **non saisie** rend la ligne « incomplète » : on ne calcule JAMAIS au prorata (une évaluation à moitié faite aurait une note d'apparence normale). Statuts V / E / NN qui remplacent le calcul ; commentaire par étudiant. Calcul identique côté navigateur (affichage immédiat, même sans réseau) et côté serveur (qui fait foi).
-- **Contrôle avant transmission** : total ≠ 100 %, classe vide, note hors 0–20, colonne pondérée non saisie bloquent ; étudiants sans aucune note = simple avertissement (enregistrés « pas encore noté »). Transmettre fige la feuille (409 même avec `force`) ; renvoyée par le registrariat, elle redevient modifiable avec son motif. La transmission exige le réseau (le serveur contrôle puis fige).
-- **Modèle de données (migration additive `2026_11_16_000001`)** : `t_remise_notes_composante` (colonnes d'une remise : `slot` = identité stable, jamais réutilisée ; `position`) et `t_remise_notes_valeur` (note d'un étudiant dans une colonne). Une remise sans colonnes enregistrées garde la structure de l'ancienne feuille (5 colonnes fixes = slots 1 à 5) ; la première écriture la « matérialise » avec ses notes. **Copie de compatibilité** : les 5 premières colonnes sont recopiées dans les colonnes historiques à chaque écriture, pour que l'ancienne validation (encore en service) reste **exacte jusqu'à 5 colonnes, et BLOQUE (total ≠ 100 %) au-delà** plutôt que de calculer une note fausse. Une feuille modifiée dans la nouvelle application ne doit plus l'être dans l'ancienne.
-- **Mêmes garanties que la présence** : propriété vérifiée à chaque appel (cours d'autrui = « introuvable » indiscernable d'un inexistant) ; une lecture n'écrit jamais (la remise et ses lignes naissent à la première écriture, lignes **sans date de saisie** pour qu'une saisie hors ligne ne soit pas « en conflit » avec la création de sa propre ligne) ; saisies = états voulus (rejouables) ; hors ligne : 409 si la cellule a changé depuis (« appliquer quand même » / « ignorer »), file ordonnée, copies de lecture ; **modifier les colonnes demande le réseau** (c'est le serveur qui donne leur identité aux nouvelles) ; journal de la remise (qui, quand, avant/après) ET journal d'activité commun.
-- **Tests** : 88 tests PHP (règles, API, hors ligne, journal) ; 28 tests web sur le calcul ; **parité avec l'ancien code** : 31 remises réelles locales (380 lignes : notes, codes, contrôles, ordre des lignes identiques) et 20 000 cas aléatoires (dont 4 200 notes calculées) sans aucun écart ; mutations (voir ci-dessous) ; e2e Chrome : liste, saisie refusée/acceptée avec virgule, colonnes libres (renommer, supprimer, ajouter), saisie hors ligne, transmission, feuille renvoyée corrigée puis retransmise, écriture refusée après transmission.
+Les écarts **voulus** (corrections par rapport à l'ancien comportement) sont listés écran par écran dans [`docs/FONCTIONNALITES.md`](docs/FONCTIONNALITES.md).
 
-## Mes informations (profil) et menu « Plus »
+---
 
-`GET /api/v1/me/profile` : MA fiche d'étudiant, **en lecture seule** (l'ancienne page `student.info.php` n'écrivait rien non plus ; les modifications restent au registrariat). Aucun identifiant en paramètre, jamais de colonne secrète (le mot de passe n'est même pas lu), réponse jamais mise en cache. Règles de l'ancienne page reprises : ligne la plus récente non retirée ; niveau 0 à 5 ; type Nouveau (1) / Spécial (10) / Ancien ; sexe 0 = Féminin, vide = inconnu ; suspension (`suspended = 1`) et retrait (`retrait_universite >= 2`) ; région lue dans `region`. Contrôlé sur les 2 258 étudiants de la copie locale : 0 erreur, 6 suspendus et 13 retraits, identiques à un comptage SQL indépendant.
+## 🛡️ Règles à ne pas casser
 
-- **Écarts assumés** : la vue 3D « scroll » de l'ancienne page (gadget, peu accessible) est remplacée par des onglets ARIA (clavier : flèches, Début, Fin) ; une valeur vide s'écrit « — » ; les dates s'écrivent en français (« 12 mars 2001 ») et la date « zéro » de MySQL est ignorée (20 fiches sur 2 258 ont une date de naissance absente ou invalide) ; le **numéro de CIN est masqué par défaut** (4 derniers chiffres), avec un bouton pour l'afficher ; téléphones et e-mails sont des liens `tel:` / `mailto:`.
-- **Menu « Plus »** : la barre du bas était pleine à 5 onglets ; elle est maintenant Accueil · Notes · Présence · Inscriptions · **Plus**. « Plus » (`/plus/`) range Mes informations et le Quiz, et reste allumé sur leurs pages ; sur ordinateur, l'en-tête les montre directement.
+> [!IMPORTANT]
+> - **Une note n'est visible d'un étudiant que si sa session est publiée** (`t_notes_publication.publiee = 1`) : la règle vit dans la requête (`api/app/Domain/Student/StudentHome.php`), jamais dans l'écran. La moyenne n'inclut jamais une session masquée.
+> - **Aucune migration destructrice** : on ne renomme ni ne supprime de table ou de colonne tant que l'ancien PHP tourne (Moodle lit des vues `v_moodle_*`). Les nouvelles migrations ne font qu'ajouter.
+> - **Un seul journal** : les connexions s'écrivent dans `security_logs`, comme l'ancienne application, avec le motif d'échec. Jamais de mot de passe ni d'identifiant saisi inconnu dans le journal.
+> - Les erreurs de l'API sont en `application/problem+json` avec un `code` stable ; le front décide d'après le code, jamais d'après le texte.
 
-## Actualités synchronisées avec zurcher.edu.mg/actualites
+---
 
-La page « Actualités » a **deux sources**, sélectionnables : **Université** (par défaut : les actualités du site public, synchronisées) et **Registrariat** (les annonces internes `t_annonces`, voir plus bas).
+## 🪟 Windows : deux pièges rencontrés
 
-- **Comment ça se synchronise** : `php artisan news:sync` (planifiée **toutes les 30 minutes**, `withoutOverlapping` ; exige la tâche cron `* * * * * php artisan schedule:run` sur le serveur) lit le **sitemap public** du site (autorisé par son `robots.txt`), compare la date de modification de chaque article et ne télécharge que les articles **nouveaux ou modifiés** (`--force` : tout ; `--dry-run` : dire ce qui changerait sans écrire). Une copie locale est tenue dans `t_site_news`, le journal des passages dans `t_site_news_sync` (tables ajoutées, aucune table existante modifiée). Un article retiré du site est **masqué**, jamais supprimé ; un sitemap vide, ou qui ferait disparaître plus de la moitié des articles, ne masque **rien** (jugé anormal). Si le site est injoignable, la dernière copie reste affichée : l'application ne dépend pas de la disponibilité du site pour s'afficher.
-- **Aucun HTML venu du site n'est jamais réinjecté** : le corps de l'article est converti **côté serveur** en blocs (paragraphe, intertitre, liste, citation, image) par une liste blanche (`SiteArticleParser`), et l'écran les affiche sans `innerHTML` (re-vérifiant liens et images). `script`, `style`, `iframe`, `object`, `form`… disparaissent avec leur contenu ; un lien n'est gardé que s'il est http(s) ou mailto ; une image que si elle est en **https sur zurcher.edu.mg** (aucune image tierce). Le gabarit du site est reconnu par ses repères (`h1#nws-title`, `[data-nws-prose]`…) : s'il change, l'analyse échoue proprement, **la copie existante reste** et l'erreur est journalisée.
-- **Hôte verrouillé** (`SITE_NEWS_BASE`, `https://zurcher.edu.mg`) : une adresse du sitemap vers un autre hôte est ignorée, une redirection vers un autre hôte est refusée, aucun lien du contenu n'est suivi, 15 s de délai, 3 Mo de réponse au plus, une requête toutes les 0,4 s, en-tête `User-Agent` générique (aucune donnée personnelle envoyée au site).
-- **Validé sur le vrai site** (18 articles) : titre, date, auteur, résumé et nombre d'images identiques à une extraction indépendante (Python) des pages d'origine, et **texte intégral du corps identique pour les 18** (26 406 caractères) ; une 2ᵉ passe ne télécharge rien. Images : une **miniature ~685 px** pour la liste et une image ~1 170 px pour l'article, choisies parmi les variantes responsives du site (liste : ~0,7 Mo au lieu de ~3,7 Mo ; 16 articles sur 18 en ont, comme sur le site).
-- **Limite** : le site n'expose pas d'API ni de flux (RSS/JSON) : on lit son HTML public. Le plus solide serait qu'il publie un flux JSON ; le code est isolé (`SiteArticleParser`) pour s'y brancher sans toucher au reste.
+> [!WARNING]
+> 1. **`127.0.0.1` refusé par intermittence** (erreur 10013 / `ERR_NETWORK_ACCESS_DENIED`) pour PHP et Chrome, pas pour Node ni le client MySQL. Cause non identifiée (filtre réseau du poste). Contournements : base en `DB_HOST=localhost`, serveurs de test en double pile IPv4/IPv6, et le test navigateur relance une page *uniquement* sur cette erreur précise et l'indique.
+> 2. **`php artisan serve` ne traite qu'une connexion à la fois** : les connexions « spéculatives » de Chrome le bloquent. D'où le relais `web/e2e/dev-proxy.mjs`. Sans objet en production (nginx + PHP-FPM).
 
-## Actualités : annonces du registrariat
-
-`GET /api/v1/me/news` (liste, `?category=` filtre), `GET …/{id}` (détail) et `GET …/{id}/image` (image réduite à 1 200 × 800 px au plus, ETag, jamais le fichier d'origine). Lecture seule, comme l'ancienne page `student.actus.php`.
-
-- **Qui voit quoi** : une annonce est visible si elle est active, déjà publiée (`publish_date` vide, passée ou du jour) et non expirée (`expire_date` vide, du jour ou future) ; « aujourd'hui » est la date de Madagascar. Une annonce masquée (programmée, expirée, désactivée) ou inconnue répond la même chose (404), y compris pour son image. Épinglées d'abord, puis la plus récente, puis l'identifiant (ordre total). **Parité** avec la vraie requête de l'ancienne page : mêmes annonces et même ordre sur 10 dates de la copie locale (dont les dates limites), 0 écart.
-- **Contenu = texte brut** : l'API renvoie le texte tel quel, l'écran l'affiche comme du texte (React échappe). Une annonce contenant `<script>` ou `javascript:` s'affiche en toutes lettres et n'exécute rien (testé dans Chrome). Seules les adresses `http(s)` deviennent des liens (nouvel onglet, `noopener noreferrer nofollow`) ; la séquence littérale `\n` de la base devient un vrai saut de ligne, comme dans l'ancienne page.
-- **Images** : le nom de fichier vient de la base, donc validé comme les photos d'étudiants (`App\Support\SafeImage` : pas de `..`, confinement dans `ANNOUNCEMENT_IMAGES_PATH`, type lu dans le fichier, taille et pixels plafonnés). Sur la copie locale, 1 des 2 images d'annonces est absente du dossier de l'ancienne app : l'écran la masque sans icône cassée.
-- **Écarts assumés** : une catégorie = une icône ET un mot (jamais la couleur seule ; l'application n'a qu'une teinte d'accent, l'« Urgent » utilise le rouge d'erreur) ; l'extrait ne reçoit « … » que s'il a été coupé, en caractères et non en octets ; la vue « galerie » à glisser est remplacée par une liste filtrable et accessible.
-- Rangée sous « Plus » (voir ci-dessus).
-
-## Jeu : Rubik's Cube
-
-Page `/jeu/` (rangée sous « Plus »), **entièrement côté navigateur** comme l'ancienne `student.game.php` : aucune API, aucune table. Le record (meilleur temps) est gardé dans `localStorage` de l'appareil, comme avant.
-
-- **Moteur testé** (`web/src/lib/cube.ts`) : un modèle GÉOMÉTRIQUE (26 cubies, position + rotation entière) sans aucune table de permutations à la main ; les mouvements de face sont des quarts de tour de couche. Preuves : quatre quarts de tour = identité, un mouvement puis son inverse = identité, 20 stickers déplacés par mouvement, les centres ne bougent jamais, 9 stickers de chaque couleur après un mélange, torsion des coins nulle modulo 3 (le cube reste résoluble), et surtout les **ordres connus du vrai cube** : `(R U)` = 105, `(R U')` = 63, `(R U R' U')` = 6, `(F R)` = 105. 137 tests web au total ; 20 mutations du moteur sont toutes détectées sauf un mutant équivalent.
-- **Ce que l'ancienne page ne faisait pas** : elle ne détectait jamais la résolution (`stopTimer()` n'était jamais appelé : ni arrêt du chrono, ni record). La nouvelle détecte « chaque face d'une seule couleur » (quelle que soit l'orientation du cube), arrête le chrono, annonce la victoire et enregistre le record. Seul un cube **mélangé par le jeu puis résolu par le joueur** compte pour le record.
-- **Utilisable partout** : glisser sur une face la pivote (un glissé = un quart de tour ; le sens suit la vitesse initiale du doigt, vérifié sur plus de 1 000 cas et 7 vues), glisser sur le fond tourne la vue ; boutons de faces nommés (↻ / ↺) ; clavier U D L R F B (Maj = sens inverse) ; « Annuler » ; « Réinitialiser » ; la zone du cube est `touch-action: none` ; `prefers-reduced-motion` respecté (mouvements instantanés) ; une **forme sur chaque couleur** à la demande (daltonisme) ; annonces vocales de l'état (mélangé, résolu, record).
-- **Notation du mélange** affichée (« Voir le mélange ») : standard du cubing, et c'est ce qui permet au test de bout en bout de **résoudre vraiment** le cube au clavier en rejouant l'inverse (chrono, victoire et record vérifiés dans Chrome).
-- **Idée non réalisée** : un classement partagé des meilleurs temps, comme pour le Quiz. Il serait fiable : le serveur peut rejouer la suite de mouvements envoyée et vérifier que le cube est résolu (le temps, lui, reste déclaratif). À décider.
-
-## Connexion étudiante par la fiche (sans Google)
-
-Un étudiant peut entrer avec **son matricule ou l'adresse e-mail de sa fiche** et **le mot de passe de sa fiche** (`tbl_2024_etudiant.password`), même s'il n'a encore aucun compte utilisateur : le compte `compt_utilisateur` est alors créé, comme l'ancien code le fait à la première connexion Google (niveau 8, rôle étudiant, mot de passe aléatoire). La fiche n'est jamais modifiée.
-
-- **Ce qui est protégé** : ce mot de passe n'ouvre **que** un compte de rôle étudiant (un compte du personnel rattaché à un matricule est refusé) ; compte inactif, étudiant retiré, pseudo déjà pris : refusés ; seule la fiche la plus récente d'un étudiant compte ; comparaison en temps constant ; même message pour « inconnu » et « mauvais mot de passe » ; mêmes limites de débit que le reste de la connexion ; jamais de mot de passe dans le journal. Interrupteur : `REGISTRAR_STUDENT_PASSWORD_LOGIN=false`.
-- **ALERTE relevée le 15/11/2026 sur la copie locale** : ces mots de passe sont stockés **en clair** (aucune empreinte), et sur 2 263 fiches actives il n'y a que **672 mots de passe distincts : un seul est partagé par 1 584 étudiants** (le mot de passe initial). Avec le matricule, qui n'a rien de secret, ce mot de passe ouvrirait ~70 % des comptes à quiconque le connaît. L'ancienne application ne s'en servait pas pour la connexion (Google seulement) : l'activer tel quel créerait une faille que la production n'a pas aujourd'hui.
-- **Règle par défaut** (`REGISTRAR_STUDENT_PASSWORD_MAX_SHARING=1`) : un mot de passe porté par 2 étudiants ou plus **n'ouvre aucun compte**, et la réponse est identique à celle d'un mauvais mot de passe (pas d'oracle), avec un message qui oriente vers Google ou le registrariat. Sur un échantillon de 600 étudiants réels : 30 % entrent avec leur fiche (mot de passe personnel), 68 % sont refusés (mot de passe commun). Mettre `0` lève la règle : à ne faire qu'en connaissance de cause.
-- **Pour que tous puissent entrer** : donner à chaque étudiant un mot de passe **personnel** (réinitialisation en masse par le registrariat, ou changement de mot de passe par l'étudiant connecté via Google), puis, idéalement, stocker des empreintes (bcrypt, déjà accepté) au lieu du clair. À planifier.
-- **Adresses partagées** (147 adresses sont portées par plusieurs fiches) : par e-mail, le mot de passe désigne l'étudiant ; si deux étudiants ont la même adresse et le même mot de passe, la connexion est refusée (utiliser le matricule). Le compte créé ne copie pas une adresse partagée.
-
-## Quiz et classement
-
-Le **serveur est l'arbitre** : il tire les 10 questions (`POST /api/v1/me/quiz/parties`), juge chaque réponse (`POST …/parties/{id}/reponses`) et calcule seul le score et la durée. Il n'existe aucune route « enregistrer mon score ». La bonne réponse n'est révélée qu'après la réponse du joueur ; une réponse en moins de 0,8 s est refusée ; une partie expire après 30 minutes ; en lancer une nouvelle abandonne la précédente ; au plus 30 parties par heure et par compte. Seules les parties **terminées** comptent.
-
-- **Classement** (`GET /api/v1/me/quiz/classement?period=week|all`) : la meilleure partie de chaque joueur (pourcentage, puis temps le plus court ; ex æquo = même rang). « Cette semaine » repart chaque lundi (heure de Madagascar). Les autres ne voient que « Prénom N. », jamais le matricule ni le nom complet.
-- **Confidentialité** : chaque joueur peut ne plus apparaître au classement (`PUT /api/v1/me/quiz/reglages`) ; il garde ses statistiques mais ne prend plus de place dans les rangs.
-- **Tables** (ajout seulement) : `t_quiz_question`, `t_quiz_partie`, `t_quiz_partie_question`, `t_quiz_joueur`. Banque de 53 questions : `php artisan quiz:import-questions` (idempotent ; l'état actif/inactif d'une question est conservé).
-- Limite connue : les questions de l'ancienne page étaient lisibles dans son code ; ici la bonne réponse ne quitte jamais le serveur avant la réponse, mais rien n'empêche de rejouer en notant les réponses vues. Le classement est un jeu, pas un examen.
-
-## Mes inscriptions et fiche d'inscription (PDF)
-
-`GET /api/v1/me/enrollments` (une fiche par session, groupées par année), `GET …/{session}` (la fiche en JSON, affichée dans l'application) et `GET …/{session}/pdf` (le PDF, fabriqué **sur le serveur** avec dompdf : même rendu partout, plus de dépendance à un CDN, jamais mis en cache).
-
-- **Qui voit quoi** : le matricule vient du compte, jamais de la requête. Une session d'un autre étudiant, inconnue, ou trop ancienne répond la même chose (404), sans rien révéler. Visibilité : Licence à partir de 2026-2027, Master à partir de 2025-2026 (décision du registrariat du 07/10/2026, `EnrollmentRules::SHEETS_FROM`) ; la rubrique « fiches_inscription » peut être masquée par le registrariat (`t_espace_etudiant_config`).
-- **Montants** : portés de l'ancienne fiche. Preuve de parité : la VRAIE fiche de l'ancien code a été exécutée sur la base locale pour les 482 inscriptions visibles, et comparée à la nôtre (cours, crédits, laboratoire, sous-total, tranches, total général) : **0 écart**. Règles : seuls les deux premiers cours à laboratoire sont facturés ; frais de graduation seulement au 2ᵉ semestre pour un étudiant diplômant ; en Master les lignes à 0 se taisent et le bloc « scolarité » disparaît s'il est à 0 ; une session sans ligne financière est **nommée** (« ne vaut pas justificatif de paiement »), jamais escamotée.
-- **Écarts assumés avec l'ancienne fiche** : (1) le niveau est celui de l'inscription, pas le niveau actuel du dossier (432 inscriptions diffèrent) ; (2) la ligne « Frais costume » s'affiche dès qu'elle est comptée dans le total (avant : comptée sans être montrée, 102 lignes concernées) ; (3) un cours disparu du catalogue s'écrit « — » (avant : « Général ») ; (4) la photo n'est pas reprise pour l'instant.
-- **Photo** : la photo de la fiche étudiante (`tbl_2024_etudiant.image_student`, dossier de l'ancienne app, `STUDENT_PHOTOS_PATH`) figure sur la fiche dans l'app et en haut à droite du PDF, réduite (420 × 540 px au plus, JPEG, redressée selon l'EXIF). Le chemin est une donnée saisie : validé (pas de `..`, pas de chemin absolu ni d'antislash), confiné dans le dossier (`realpath`), type lu dans le fichier, taille et pixels plafonnés. Seule MA photo est servie (`GET /api/v1/me/photo`, aucun identifiant en paramètre). Relevé : 915 fiches sur 2 263 ont une photo utilisable (790 noms simples, 125 chemins avec sous-dossier) ; les autres s'impriment avec un cadre « Photo » vide.
-- **Décision métier ouverte** : dans le module d'inscription, `cout_costume` et `cout_voyage` sont EXCLUS du total ; dans la fiche imprimée ils sont INCLUS. On suit la fiche imprimée (le document déjà remis aux étudiants). À trancher par le registrariat.
-
-## Règles à ne pas casser
-
-- **Une note n'est visible d'un étudiant que si sa session est publiée** (`t_notes_publication.publiee = 1`) : la règle vit dans la requête (`api/app/Domain/Student/StudentHome.php`), jamais dans l'écran. La moyenne n'inclut jamais une session masquée.
-- **Aucune migration destructrice** : on ne renomme ni ne supprime de table ou de colonne tant que l'ancien PHP tourne (Moodle lit des vues `v_moodle_*`). Les nouvelles migrations ne font qu'ajouter.
-- **Un seul journal** : les connexions s'écrivent dans `security_logs`, comme l'ancienne application, avec le motif d'échec. Jamais de mot de passe ni d'identifiant saisi inconnu dans le journal.
-- Les erreurs de l'API sont en `application/problem+json` avec un `code` stable ; le front décide d'après le code, jamais d'après le texte.
-
-## Windows : deux pièges rencontrés
-
-1. **`127.0.0.1` refusé par intermittence** (erreur 10013 / `ERR_NETWORK_ACCESS_DENIED`) pour PHP et Chrome, pas pour Node ni le client MySQL. Cause non identifiée (filtre réseau du poste). Contournements : base en `DB_HOST=localhost`, serveurs de test en double pile IPv4/IPv6, et le test navigateur relance une page *uniquement* sur cette erreur précise et l'indique.
-2. **`php artisan serve` ne traite qu'une connexion à la fois** : les connexions « spéculatives » de Chrome le bloquent. D'où le relais `web/e2e/dev-proxy.mjs`. Sans objet en production (nginx + PHP-FPM).
-
-## Nouveautés de versions (14/11/2026)
+<details>
+<summary><b>Nouveautés de versions (14/11/2026)</b></summary>
 
 Laravel est en **13.x** (pas 12), Next.js en **16.4**, shadcn utilise le style `base-nova` (Base UI) et le paquet `cn` de shadcn. Le `AGENTS.md` généré par Next.js demande de lire `node_modules/next/dist/docs/` avant de coder : c'est fait pour l'export statique. Le squelette Laravel proposait en outre d'installer « Laravel Boost » et des installeurs `curl | bash` : **non installés**, fichiers supprimés.
 
-## Registrariat : validation des remises de notes (annulable 10 s)
+</details>
 
-Premier écran du lot 4. Réservé aux **niveaux 1 à 3** (superadmin, admin, registrariat) ; un enseignant n'y entre pas, même en appelant l'API (403). C'est le **seul endroit de la nouvelle application qui écrit dans `t_2023_notes`**, comme `app/.remise/traiter.php` dans l'ancienne.
+---
 
-- **File** (`/validations/`) : les feuilles par état (À valider, Renvoyées, Validées, Brouillons, avec compteurs), filtre par année ; pour chaque feuille à valider : enseignant, notes prêtes, points bloquants, « validation en cours ».
-- **Contrôle** (`/validations/feuille/`) : colonnes libres de l'enseignant avec leurs poids, note calculée, **note en base → note qui serait écrite** pour chaque étudiant, nombre de notes qui changeront dans le bulletin, points bloquants et avertissements, historique de la feuille.
-- **« Annuler » est vrai côté serveur** (docs/ETUDE-05 §4) : *Valider* n'écrit AUCUNE note, il enregistre une demande (`t_remise_validation_attente`, migration additive `2026_11_16_000002`) qui ne peut aboutir qu'au bout de **10 secondes** ; *Annuler* la supprime. Passé le délai, l'écran qui attend demande la finalisation ; **onglet fermé, la commande planifiée `remises:finalize-due` (chaque minute, même `schedule:run` que la synchro des actualités) la termine** : aucune file d'attente (queue worker) à faire tourner. Idempotent : une feuille n'est jamais validée deux fois. La demande est levée si la feuille a changé entre-temps (renvoyée, devenue incomplète) : rien n'est écrit.
-- **La validation** (port de `remiseValider`) : une transaction, tout ou rien ; chaque note écrite est doublée dans `t_notes_modification_history` (création/modification, ancienne et nouvelle valeur, auteur, adresse IP) ; une note identique n'est pas réécrite ; une ligne sans inscription liée est ignorée ; ligne vierge = « pas encore noté » (-4) ; V/E/NN = -2/-3/-4 ; **cours de validation** (catégorie 5, titre « formation spirituelle ») écrit en -2 / -3 selon 10/20. Le journal de la feuille et le journal d'activité commun reçoivent l'action, au nom du compte qui l'a demandée (même quand c'est la commande qui la termine).
-- **Renvoyer** : motif obligatoire, la feuille redevient modifiable chez l'enseignant avec le motif affiché.
-- **Compte du personnel qui enseigne** : `/auth/me` renvoie `teacher_space` et `review_space` ; le menu et l'accueil montrent à chacun ce qu'il peut faire (un admin qui enseigne voit Présence, Notes et Validations).
-- **Tests** : 31 tests PHP dédiés (accès, fenêtre d'annulation, écriture et historique, cas particuliers, atomicité, commande planifiée, parcours enseignant → renvoi → correction → validation) ; **parité avec l'ancien `remiseValider` : 300 scénarios aléatoires rejoués sur les mêmes données, 300 identiques, 403 notes écrites de la même façon** (dont 89 « validé », 79 « échec », 155 « pas encore noté ») et les cas bloqués le sont des deux côtés ; mutations ; e2e Chrome : file, contrôle, annulation (rien d'écrit, même après 10 s), validation réelle par le serveur, renvoi avec motif, 403 pour un enseignant.
-- **Validation groupée** (`POST review/remises/bulk/{approve,undo,finalize}`, 25 feuilles au plus par demande) : dans l'onglet « À valider », une case par feuille PRÊTE (transmise, sans point bloquant, pas déjà en cours), « Tout sélectionner », puis « Valider la sélection (N) ». Même filet que la feuille seule : rien n'est écrit, **chaque feuille ouvre sa propre demande avec son délai de 10 s**, un compte à rebours commun et « Annuler la validation » (annule toutes les demandes encore dans leur délai) ; à la fin du délai l'écran finalise, sinon la commande planifiée. **Une feuille refusée n'arrête pas les autres** : l'API la rend avec le code et la raison (incohérences, déjà validée, introuvable, délai dépassé pour annuler, délai qui court encore + temps restant) et l'écran dit « 2 feuilles validées, 1 non validée » avec le motif. Un journal d'activité par demande groupée. Les droits sont ceux de la validation (niveaux 1 à 3).
-- **Le lot 4 est terminé** (voir les sections ci-dessous : assiduité, listes et fiches, tableau de bord, candidatures, création d'étudiant).
+## 🎨 Direction visuelle « Affiche »
 
-## Registrariat : assiduité (signalements au-delà de 15 %, retards des enseignants)
+Un seul accent de couleur sur des fonds neutres. Référence complète : [`docs/ETUDE-03-direction-visuelle.md`](docs/ETUDE-03-direction-visuelle.md), valeurs dans `web/src/app/globals.css`.
 
-Deuxième écran du lot 4 (`/assiduite/`, port de `src/presence.php` et `app/.presence/traiter.php`). Réservé au **superadmin et au registrariat** (comme l'ancienne page : `exigerPrivileges(['superadmin','registrar'])`), **pas à l'administration (niveau 2)** ; `/auth/me` renvoie `attendance_space`, le menu et l'accueil n'affichent « Assiduité » qu'à ces deux rôles, et l'API répond 403 aux autres (enseignant, administration, comptabilité, étudiant, compte inactif).
+| Rôle | Sombre | Clair |
+|---|---|---|
+| Accent (actions, traits) | ![#00c4d4](https://img.shields.io/badge/-%2300c4d4-00c4d4?style=flat-square) `#00c4d4` | ![#00727e](https://img.shields.io/badge/-%2300727e-00727e?style=flat-square) `#00727e` (texte, 5,2:1) |
+| Fond | ![#0a0b0f](https://img.shields.io/badge/-%230a0b0f-0a0b0f?style=flat-square) `#0a0b0f` | ![#f4f5f7](https://img.shields.io/badge/-%23f4f5f7-f4f5f7?style=flat-square) `#f4f5f7` |
+| Carte | ![#10131a](https://img.shields.io/badge/-%2310131a-10131a?style=flat-square) `#10131a` | ![#ffffff](https://img.shields.io/badge/-%23ffffff-ffffff?style=flat-square) `#ffffff` |
+| Bouton principal (clair) | | ![#1a2b6a](https://img.shields.io/badge/-%231a2b6a-1a2b6a?style=flat-square) `#1a2b6a` (marine) |
 
-- **Au-delà de 15 % d'absences (§476)** : les signalements posés automatiquement au pointage, non traités d'abord (puis les plus récents), avec le compte **d'aujourd'hui** (une absence corrigée depuis peut avoir ramené l'étudiant sous le seuil : « Revenu sous le seuil » / « Toujours au-delà »), le compte au moment du signalement, le cours, l'enseignant. Bouton **« Traité »** : une seule fois, daté et signé du compte (`traite_le`, `traite_par`), journalisé ; le second clic ne change rien et conserve la première date. Case « Afficher les traités ».
-- **Retards des enseignants (§474)** : séances où l'enseignant est arrivé plus de 10 minutes après l'heure prévue, avec ou sans message aux étudiants (« séance sans pénalité pour les étudiants »), et le décompte par enseignant.
-- **Registres sans séances prévues** : la règle des 15 % ne peut pas s'y appliquer.
-- Filtre par année scolaire (l'année en cours par défaut) ; le compteur « à traiter » couvre toutes les années, comme l'ancienne page.
-- **Ce qui change** : un signalement inconnu répond 404 (l'ancienne page répondait « ok, 0 traité ») ; pas de lien « Registre » vers l'espace enseignant (le registrariat n'y entre que s'il enseigne : jamais de lien mort).
-- **Tests** : 22 tests PHP dédiés (accès, ordre, année, bilan du jour, §474, retards, sans base, traitement idempotent, journal) ; **parité avec l'ancien code sur la base locale : SQL de l'ancienne page + vraies fonctions de `data/presence.php`, 94 signalements synthétiques × 2 années × avec/sans traités, 0 écart** (retards, décompte par enseignant, registres sans base, compteur et liste des années identiques) ; mutations (28 mutants, 2 équivalents) ; e2e Chrome : affichage, traitement, masquage/affichage des traités, 403 pour un enseignant.
+Tous les contrastes texte/fond sont ≥ 4,5:1.
 
-## Registrariat : listes et fiches (étudiants, cours, enseignants)
+---
 
-Port du moteur de listes de l'ancienne application (`data/listes.php`) : une seule description par liste (colonnes, recherche, filtres, tris), l'état entier (recherche, filtres, tri, page) appliqué à chaque requête — **trier ne retire plus un filtre**, comme avant. Les valeurs de la requête n'entrent jamais dans le SQL autrement que liées.
+## 📚 Documentation
 
-- **Étudiants** (`/etudiants/`) : tout le personnel (superadmin, administration, registrariat, comptabilité, media, chef de mention), pas l'étudiant, l'enseignant ni le Work Education. **Cours** et **enseignants** : superadmin et registrariat seulement, comme avant.
-- **Recherche** à plusieurs mots (chacun doit se retrouver dans un champ ; pour les cours, le nom de l'enseignant compte), **filtres** à plusieurs valeurs (OU) et plusieurs filtres (ET) avec le nombre de lignes de chaque option **compte tenu des autres filtres**, **tri** par colonne (les valeurs vides toujours à la fin, ordre stable d'une page à l'autre), **pages de 200** (« Afficher la suite »). La recherche est gardée le temps de la session : on revient d'une fiche là où on était.
-- **Périmètres** (`data/perimetre.php`) : un compte limité à un cycle (Licence 0–3, Master 4–5) ne voit que celui-là, dans les listes, les compteurs, les filtres proposés, les fiches (« introuvable » sinon) et le tableau de bord ; un chef de mention ne voit dans la liste que **sa** mention (sans mention attribuée : liste vide, et la liste le dit) — forcer le filtre n'en fait pas sortir.
-- **Fiches en lecture seule** : étudiant (identité, études, état, inscriptions par année), cours (enseignant, étudiants inscrits par année), enseignant (coordonnées, cours). **Jamais** de mot de passe, pièce d'identité, visa, famille, garant, groupe sanguin, religion, date de naissance de l'enseignant ni tarif. La modification des fiches (formulaires, notes, relevés) reste dans l'ancienne version : l'écran le dit.
-- **Menu** : sur téléphone la barre du bas a 5 places au plus ; au-delà, les quatre premières pages y figurent et le reste passe par **« Plus »** (qui dit à quoi sert chaque page). Sur grand écran l'en-tête montre tout. Un lien n'apparaît que si la page existe ET que le compte peut l'ouvrir.
-- **Tests** : 42 tests PHP (accès, recherche, filtres, facettes, tri, pages, périmètres, confidentialité des fiches) ; **parité avec l'ancien moteur sur la base locale : 420 états aléatoires des trois listes, 24 667 lignes comparées, 0 écart** (lignes, totaux et compteurs de filtres) ; mutations (59 mutants, tous détectés).
+| Document | Pour quoi faire |
+|---|---|
+| 🧱 [`docs/FONCTIONNALITES.md`](docs/FONCTIONNALITES.md) | **Le détail de chaque écran** : règles reprises, écarts assumés, preuves, tests. À compléter à chaque tranche livrée. |
+| 🗺️ [`docs/PLAN-PAGES.md`](docs/PLAN-PAGES.md) | Les huit lots, dans l'ordre de l'usage réel. |
+| 📇 [`docs/INVENTAIRE-PAGES.md`](docs/INVENTAIRE-PAGES.md) | Les 127 routes de l'ancienne application et leur usage réel. |
+| 🔍 [`docs/ETUDE-01-existant-et-stack.md`](docs/ETUDE-01-existant-et-stack.md) | L'existant et le choix de la pile. |
+| 📊 [`docs/ETUDE-02-decisions-et-usage-reel.md`](docs/ETUDE-02-decisions-et-usage-reel.md) | Décisions et usage réel. |
+| 🎨 [`docs/ETUDE-03-direction-visuelle.md`](docs/ETUDE-03-direction-visuelle.md) | Direction visuelle « Affiche ». |
+| ✨ [`docs/ETUDE-04-ameliorations-fonctionnelles.md`](docs/ETUDE-04-ameliorations-fonctionnelles.md) | Améliorations fonctionnelles. |
+| 🔐 [`docs/ETUDE-05-api-et-authentification.md`](docs/ETUDE-05-api-et-authentification.md) | **API, authentification, hors ligne, « annuler » côté serveur.** À lire d'abord. |
+| 🖼️ [`docs/maquettes/`](docs/maquettes) | Maquettes HTML (direction visuelle, structure v2). |
+| 🚀 [`deploy/README.md`](deploy/README.md) | Mise en ligne : variables, migrations, tâches planifiées, notes par lot. |
 
-## Registrariat : tableau de bord
+---
 
-Page d'accueil du personnel (port de `data/tableau-de-bord.php`) : **« À traiter »** (remises à valider avec l'ancienneté de la plus ancienne, signalements d'absences, nouvelles candidatures, notes non saisies de l'année écoulée par cours, cours offerts sans enseignant, sigles affichés par deux cours) et **« Chiffres clés »** par année scolaire (inscrits comparés à l'an dernier **à la même date**, nouveaux étudiants, candidatures reçues, répartition par cycle / sexe / hébergement, inscrits par mention). Règles reprises : un compteur n'apparaît que si la page qu'il ouvre est accessible ; un étudiant compte **une fois par année**, sur sa dernière inscription ; l'année d'une inscription est celle de sa **session** (la copie a divergé) ; le périmètre de cycle s'applique aux inscriptions, cours et notes.
+<div align="center">
 
-- **Pas encore repris** (leurs pages ne sont pas dans la nouvelle application) : réinscriptions à autoriser (lot 5, finance), dossiers au guichet et file d'attente (lot 7), courbe de la rentrée, entonnoir des admissions, taux de saisie des notes, activité récente.
-- **Parité** avec l'ancien code sur la base locale : 5 années, éléments « à traiter » (nombres, listes de cours, ordre) et chiffres clés (totaux, répartitions, mentions, candidatures) identiques ; 25 tests PHP, 40 mutants détectés.
+Fait pour le registrariat, les enseignants et les étudiants de l'UAZ.<br>
+<sub>L'ancienne application reste la référence tant qu'un écran n'a pas sa preuve de parité.</sub>
 
-## Registrariat : candidatures de pré-admission
-
-Superadmin et registrariat (`/candidatures/`) : liste par statut (compteurs ; les archives en sont exclues), fiche complète, **instruire** (nouveau, en cours, accepté, refusé ; « converti » n'est jamais posé à la main), **archiver** (ne change pas le statut).
-
-- **Prévenir le candidat est une tâche, plus une attente.** L'ancienne page envoyait le courriel puis le SMS PENDANT la requête. Ici, accepter ou refuser enregistre la décision (réponse **202**) et pose une tâche par canal (`t_candidat_notification`, migration additive) ; la commande planifiée `applications:notify` (chaque minute) les envoie, avec **trois essais espacés (1, 5, 30 min)**, puis « échec » relançable (« Réessayer »). Une tâche est réservée avant l'envoi ; si la décision change entre-temps, rien ne part.
-- **Avant de confirmer**, l'écran dit qui sera prévenu (« Courriel à … », « SMS au … ») et pourquoi un canal ne partira pas (pas d'adresse, numéro inexploitable, **Master** : le courriel part à la création de l'étudiant avec son adresse et son mot de passe).
-- **Ce qui change** : un second clic sur le même statut ne prévient pas le candidat une seconde fois (l'ancien code renvoyait le message à chaque clic) ; une décision déjà notifiée n'est pas renotifiée si on la reprend.
-- **Textes identiques à l'ancien code** (mot pour mot, HTML compris) : parité sur les 77 candidatures réelles — 231 courriels, 231 SMS, 89 numéros, 231 messages « Master », 0 écart.
-- **Configuration** : le courriel utilise `MAIL_*` ; le SMS `SMS_PROVIDER` — **`journal` par défaut (n'envoie RIEN, écrit `storage/logs/sms.log`, comme l'ancienne application)** ou `twilio` (`TWILIO_SID`, `TWILIO_TOKEN`, `TWILIO_FROM`). Le fournisseur « passerelle » HTTP de l'ancien code n'est pas repris (non utilisé par défaut) : à demander si l'opérateur local en dépend. Voir `deploy/README.md`.
-- **Tests** : 46 tests PHP ; mutations (59 mutants, un seul équivalent).
-
-## Registrariat : création d'un étudiant
-
-Niveaux 1 à 3 (`/etudiants/nouveau/`, ou « Créer l'étudiant » depuis une candidature **acceptée**). Formulaire en quatre étapes (identité et contact, études, famille et garant, récapitulatif), brouillon gardé sur l'appareil, validation par étape et par le serveur.
-
-- **Ce que la création fait**, dans une transaction : un **matricule libre** (celui qui est proposé n'est jamais pris tel quel : on avance la partie numérique en gardant le suffixe, `20481MG` → `20482MG`), une **adresse universitaire unique** (jamais reprise, même d'une fiche supprimée ; l'agent est averti si elle change), la fiche, le diplôme précédent (baccalauréat en licence, diplôme en master) ; depuis une candidature, elle la **convertit et l'archive** (jamais deux fois : une candidature convertie renvoie vers l'étudiant existant). Mention fermée refusée (sauf celle de la candidature) ; parcours validé pour la mention et le cycle.
-- **Ce qui change** : (1) le **compte Google n'est plus créé pendant la requête** (1,4 s en moyenne, 8,9 s au pire) : une tâche (`students:google-accounts`, chaque minute, trois essais espacés) le crée, son état se lit sur l'écran avec « Réessayer » ; (2) le **jeton anti-doublon est en base** (UNIQUE) : le même formulaire envoyé deux fois ne crée qu'un étudiant (l'ancien le gardait dans la session) ; (3) le **mot de passe initial est aléatoire** (12 caractères sans ambiguïté) au lieu de « 4 chiffres + Student + année » (9 000 valeurs par an), rendu **une seule fois** et absent du journal d'activité ; (4) le courriel d'acceptation d'un candidat de **Master** attend l'issue du compte Google pour dire si l'adresse est déjà active.
-- **Pas repris** : l'envoi de la **photo** (à ajouter depuis l'ancienne version) ; le calcul des frais, que l'ancien code faisait sans jamais l'enregistrer.
-- **Parité** avec l'ancien code sur la base locale : propositions de matricule (9 mentions × 6 niveaux), matricules libres (156 cas, avec suffixe), adresses universitaires pour 407 noms réels (dont 4 avec numéro) et 814 vérifications « adresse prise » — 0 écart. 59 tests PHP (dont le JWT signé envoyé à Google), 88 mutants dont les survivants sont documentés comme équivalents.
-- **Google Admin** : sans `GOOGLE_ADMIN_KEY` (clé JSON du compte de service, HORS du dépôt), aucun compte n'est créé et la fiche le dit. Voir `deploy/README.md`.
-
-## Finance : autorisation de réinscription
-
-Niveaux 1, 3 et 4 (`/finance/reinscription/`, sous « Plus » sur téléphone). Un étudiant peut se réinscrire quand **la caisse l'autorise ET que le registraire a validé son dossier** ; chaque rôle ne touche que sa colonne (caisse : niveaux 1 et 4 ; dossier : niveaux 1 et 3), la **réinitialisation globale est réservée au superadmin**. L'écran dit en tête ce que le compte peut modifier, et les cases qu'il ne peut pas toucher sont affichées en lecture seule (pas de bouton mort). Les droits sont revérifiés par le serveur à chaque appel (403 avant toute validation).
-
-- **Les quatre états** (prêts / en attente de la caisse / en attente du dossier / ni l'un ni l'autre) s'excluent et totalisent l'effectif : ils servent de compteurs ET de filtres. Recherche (matricule, nom, prénom, mention, parcours) et filtres mention, parcours, année scolaire, niveau ; « afficher la suite » par 200. Comme l'ancienne page, **aucun périmètre de cycle ou de mention** : la caisse et le registrariat voient tout l'effectif.
-- **Une bascule ne change plus rien si la valeur est déjà celle demandée** (l'ancien code réécrivait l'auteur et la date à chaque clic, même sans changement). Chaque vraie bascule laisse une ligne dans l'**historique de l'étudiant** (comme la réinitialisation le faisait déjà) et une ligne dans le **journal d'activité**. La réponse du serveur remplace la ligne à l'écran : l'auteur et le jour affichés sont ceux posés par le serveur.
-- **Action groupée** (nouveau) : cocher jusqu'à 100 étudiants, « Autoriser » / « Valider le dossier » ou l'inverse, selon les droits du compte ; une transaction, un historique par étudiant, et **« Annuler » dans la notification** rejoue l'inverse sur les seuls étudiants réellement modifiés.
-- **Réinitialisation globale** (superadmin) : choix des colonnes, **aperçu exact de la portée** (cases, étudiants, et surtout combien ne pourront plus se réinscrire), phrase `RÉINITIALISER` revérifiée par le serveur. Chaque lot est photographié ligne par ligne (`t_reinscription_reinitialisation`), tracé dans l'historique de chaque étudiant et **annulable pendant sept jours** depuis un bandeau (même après rechargement ou depuis un autre poste). L'annulation ne restaure une ligne que si personne n'y est repassé depuis (valeur 0, même auteur, même horodatage à la seconde) : le geste d'un caissier après la réinitialisation n'est jamais écrasé.
-- **Écart voulu** : un étudiant sans niveau renseigné s'affiche « Non renseigné » (l'ancienne page disait « Remise à niveau »).
-- **Parité** avec l'ancien code, en exécutant les VRAIES fonctions `rsnStatistiques`, `rsnApercu`, `rsnReinitialiser`, `rsnAnnuler`, `rsnDernierLot` et la requête de l'ancienne page sur une copie jetable des données réelles locales (2 263 étudiants) : **902 vérifications, 0 écart** — lignes, états, traces « qui · quand », 350 combinaisons de filtres, 500 recherches, bascules, et trois portées de réinitialisation (les deux colonnes, la caisse seule, le dossier seul) rejouées avec des gestes humains entre la réinitialisation et l'annulation : fiches, historique et photographie identiques (910 cases restaurées, 7 laissées, comme l'ancien code).
-- **Tests** : 33 tests PHP dédiés (droits par niveau, états, filtres, bascules, idempotence, action groupée, réinitialisation, annulation marque par marque, fenêtre de sept jours, journal) ; 54 mutants du domaine, 53 tués et un équivalent (la photographie ne contient que des lignes à 1) ; 14 tests web ; e2e Chrome sur trois comptes (registraire, caisse, superadmin) : compteurs, interrupteurs, filtre par état, action groupée annulée depuis la notification, aperçu = serveur, réinitialisation puis annulation exacte, 403 pour chaque refus.
-- **Aucune migration** : les tables (`t_reinscription_reinitialisation`, `t_student_modification_history`) sont celles de l'ancienne application. Si la table des lots manque sur une base, la réinitialisation est refusée (409) et le reste fonctionne.
-
-## Finance : solde de compte par session
-
-Niveaux 1 à 4 (`/finance/soldes/`, sous « Plus » sur téléphone), lecture et correction : **la comptabilité y a accès** (décision du 16/11/2026 ; l'ancienne page s'arrêtait au niveau 3). Pour une session au choix (par défaut la session active, à défaut la plus récente ; une session inconnue retombe sur la plus récente, comme l'ancienne page), la dette ou l'avance de chaque étudiant inscrit, hors suspendus, retirés de l'université et supprimés.
-
-- **Rapprochement et calcul identiques à l'ancien** : le matricule est rapproché de sa ligne `finance` tel quel, à défaut par sa partie numérique (`20481MG` → 20481) ; le solde est `balance_amount`, à défaut total à payer moins les cinq versements (montants en texte libre : espaces, insécables, virgule décimale ; illisible = 0). Affichage « -150 000 Ar » pour une dette (débitaire), « +25 000 Ar » pour une avance (créditaire), toujours avec le mot de l'état à côté.
-- **Nouveau** : filtre par état avec compteurs (débitaires, créditaires, soldés, sans ligne finance), tri par solde (dette en premier) / nom / matricule / code, totaux (dettes, avances, net), recherche tolérante aux accents sur matricule, code de compte et nom, « afficher la suite » par 200. Les étudiants **sans ligne finance** sont annoncés comme tels (l'ancienne page les montrait « Solde 0 ») et ne sont pas modifiables. La correction se fait par un bouton « Modifier » (l'ancien double-clic ne marche pas au doigt) avec contrôle du montant avant l'envoi.
-- **Écriture** : le montant est relu comme avant (espaces, virgule) mais refusé s'il n'est pas un nombre fini dans la plage de la colonne (`decimal(15,2)`) ; l'auteur et l'heure sont enregistrés dans la ligne finance (`last_change_*`), une entrée va au journal d'activité (avant/après). **Enregistrer la même valeur n'est plus une erreur** (l'ancien code répondait « ligne introuvable » parce qu'il comptait les lignes MODIFIÉES). Une ligne absente répond 404, un montant illisible 422.
-- **Parité** avec l'ancien code, en exécutant le bloc PHP de l'ancienne page sur les données réelles locales : 15 sessions, 2 249 lignes (398 avec ligne finance, 392 soldes non nuls), 169 soldes calculés après effacement des soldes enregistrés (versements en texte libre), libellés et ordre des sessions, et 16 saisies rejouées sur une copie jetable contre le vrai point d'entrée de l'ancienne modification : **50 vérifications, 0 écart** ; seuls les cas déjà cités diffèrent (même valeur : 404 avant, « inchangé » maintenant).
-- **Tests** : 18 tests PHP dédiés ; 42 mutants du domaine, 40 tués et 2 équivalents ou non simulables (le rapprochement numérique côté finance est identique à l'identifiant entier ; la colonne absente ne se simule pas sans DDL). Un test a révélé un vrai défaut : un grand montant lié en nombre à virgule s'écrivait `1.0E+13` (maintenant lié en texte). 8 tests web ; e2e Chrome (20 vérifications) : cinq inscrits dans l'ordre, soldes, état sans ligne, compteurs et totaux, filtre, recherche, correction avec montant illisible refusé, enregistrement, même valeur, 404/422, 403 pour un étudiant, accès de la comptabilité.
-- **Aucune migration** : table `finance` de l'ancienne application. Si la colonne `balance_amount` manque sur une base (script `data/sql_finance_balance_amount.sql` de l'ancien dépôt), la liste calcule les soldes et la correction est refusée (409).
-
-## Finance : échéances de paiement
-
-Niveaux 1 à 4 (`/finance/echeances/`, sous « Plus » sur téléphone). La date limite de chaque tranche de paiement, session par session ; elle s'imprime sur la fiche d'inscription (PDF et écran de l'espace étudiant, qui lisent déjà cette table) et s'affiche au guichet. **La comptabilité y a accès** comme sur le solde de compte ; l'ancienne page s'arrêtait au niveau 3 (à confirmer pour cette page : un seul réglage, `Deadlines::allows`).
-
-- **Règles de l'ancienne page, inchangées** : type A en une fois, B en deux tranches de 50 %, E en quatre de 25 % ; C et D (anciens) ne sont montrés que si un dossier de la session ou une date les porte encore ; chaque tranche doit venir **après** la précédente du même type (une tranche vide est sautée) ; une date vide retire la tranche, un type absent n'est pas touché ; l'auteur et l'heure ne changent que si la date change. Session affichée : celle demandée, sinon celle où l'on inscrit en ce moment (dernière ligne de frais créée), sinon la session en cours, sinon la plus récente.
-- **Écran** : sélecteur de session groupé par année (avec « — à définir » pour celles sans date) et boutons précédente/suivante, période de la session, effectifs par type (étudiants distincts) et étudiants sans type choisi, état (« 3 dates sur 7 »), frise de la session avec un repère par tranche, **repère de chaque date** (« Vendredi, 11e semaine de la session », « 17 jours après la fin de la session »), contrôle de l'ordre pendant la saisie, barre d'enregistrement (« 2 dates modifiées », « Annuler les changements »), avertissement si l'on quitte avec des dates non enregistrées, et « Reprendre les dates de l'an dernier, 52 semaines plus tard » (même jour de la semaine).
-- **Écriture** : tout est validé AVANT la moindre écriture (date réelle au format `AAAA-MM-JJ`, ordre, type connu, session connue), puis une transaction ; chaque ligne ajoutée, changée ou retirée est **journalisée** (avant/après) ; rien n'est écrit ni journalisé si rien n'a changé (« Rien n'avait changé »). Les erreurs de saisie nomment le champ (`dates.E.2`).
-- **Parité** avec l'ancien code, en exécutant les VRAIES fonctions `echeancesTypes`, `echeancesSession`, `echeancesEnregistrer` et la logique de la page sur les données réelles locales : 110 sessions en lecture (session choisie, voisines, dates, effectifs, types montrés, « reprendre », période, ordre et libellés), puis **400 saisies aléatoires** rejouées sur une copie jetable (dates invalides, ordre violé, rangs absents, types inconnus, session inconnue) : **1 683 vérifications, 0 écart** (276 saisies acceptées, 1 703 lignes changées, 124 refus identiques).
-- **Tests** : 20 tests PHP dédiés ; 41 mutants du domaine, 38 tués et 3 équivalents ou non simulables (session 0, types non montrés dans le décompte — ils le sont toujours dès qu'ils ont une date —, table absente) ; 12 tests web ; e2e Chrome (20 vérifications) : types montrés, période et état, ordre refusé puis corrigé, repères, date hors session, enregistrement, état « 2 dates sur 7 », annulation des changements, retrait d'une date, accès comptabilité, 403 pour un étudiant, 422/404.
-- **Aucune migration** : la table `t_paiement_echeance` est celle de l'ancienne application (`data/migration_paiement_echeances.sql`), déjà lue par la fiche d'inscription du nouvel espace étudiant. Sans elle, l'écran le dit et l'enregistrement est refusé (409).
-
-## Finance : barème par session et frais supplémentaires
-
-Niveaux 1 à 3 (`/finance/bareme/`, sous « Plus » sur téléphone), comme l'ancienne page « Gestion finance » : **modifier le barème change ce que paient tous les étudiants, donc la comptabilité (niveau 4) n'y a PAS accès** pour l'instant (un seul réglage : `Tariff::allows`) ; à confirmer.
-
-- **Le modèle de l'ancien code est repris tel quel** : `t_2024_finance_detail_licence` a deux étages, le **barème de base** (`session_id = 0`, repli de toute session) et la **surcharge** d'une session, qui n'existe que si on l'a ajustée. Une case sans montant propre affiche celui de la base (« hérité », en pointillé) ; une session sans tarif propre suit la base, donc aucune session ne se retrouve sans barème. Onze montants par case (frais généraux, labos, dortoir, cantine, fond de dépôt, jours d'internat, écolage, graduation, costume, voyage) × six niveaux (remise à niveau à Master 2) × interne/externe. Les champs sans sens ne sont pas montrés (graduation : semestre 2 ; costume : Théologie au semestre 1 ; « Colloque » au lieu de « Voyage d'étude » en Théologie). Seules les filières **ouvertes** ont une carte.
-- **Écriture** : seuls les montants **modifiés** sont envoyés et écrits (l'ancien `save_finance.php` remettait à zéro tout ce que la page ne rendait pas : retiré du service dès l'ancien code) ; la surcharge naît **complète, en partant de la base** ; les mêmes montants peuvent être appliqués à **d'autres filières** en une transaction (« Appliquer aussi à… ») ; « Reprendre la base » crée les lignes propres à la session (sans écraser un ajustement déjà fait, et seulement pour le semestre de la session) ; « Revenir à la base » supprime la surcharge (le barème de base lui-même ne se supprime ni ne se remplace). Un montant négatif, illisible ou énorme est **refusé pour toute la requête** (l'ancien code l'écrivait) ; chaque ligne écrite, reprise ou supprimée est **journalisée** (avant/après).
-- **Frais supplémentaires** (« Alliance française »…) : ajoutés par le registrariat, ils deviennent une ligne de chaque filière, avec leur règle (« facturé à » : tous, diplômants, nouveaux, abonnés, internes ; semestres concernés), le même repli sur la base (case **vide** = retour à la base, **0** = rien à payer ici), renommage (les inscriptions déjà faites gardent l'ancien nom) et désactivation réversible (montants et historique conservés). Créer un frais qui existe déjà le réactive au lieu de le dupliquer. **L'application aux étudiants se fait à l'inscription au guichet** (lot 7) : cet écran n'écrit que les définitions et les montants.
-- **Parité** avec l'ancien code, en exécutant les VRAIES fonctions de `data/finance.bareme.php` et `data/finance.frais.php` sur les données réelles locales : 109 sessions × 9 filières × 4 semestres = **47 088 cases** lues (dont 20 928 avec un tarif) identiques, y compris l'héritage et la provenance, les frais supplémentaires et leur héritage, les années et sessions ; puis **300 scénarios d'écriture aléatoires** sur une copie jetable (enregistrer sur une ou plusieurs filières, reprendre, revenir à la base, montants de frais, créer/régler/renommer/désactiver) : **12 674 vérifications, 0 écart**.
-- **Tests** : 28 tests PHP dédiés ; 56 mutants des deux domaines, 55 tués et 1 équivalent (le refus d'un nom de frais déjà pris existe à deux niveaux) ; 9 tests web ; e2e Chrome (27 vérifications) : filières ouvertes seulement, héritage de la base affiché, montant illisible refusé sur place, surcharge créée depuis la base (l'écolage non transmis reste à 20 000), application à deux filières, retour à la base puis reprise, graduation au semestre 2, ajout d'un frais, montant du frais, réglage « semestre 2 », désactivation, 403 pour la comptabilité et un étudiant, 422 pour montant négatif, filière inconnue et suppression de la base.
-- **Migration** : `2026_11_18_000001_create_extra_fee_tables` crée les trois tables des frais supplémentaires **si elles manquent** (l'ancienne application les créait à la première ouverture de sa page) ; sans effet sur une base où elles existent déjà. Le barème lui-même est dans `t_2024_finance_detail_licence`, table de l'ancienne application.
-- **Non repris** : `brouillon.php` (un brouillon HTML mort, jamais inclus) et les points d'entrée `save_finance.php` / `insert_finance.php` (retirés du service dans l'ancien code, ils répondent 410).
-
-## Espace enseignant pour le personnel qui enseigne
-
-`GET /auth/me` renvoie `teacher_space` : vrai pour un enseignant ou chef de mention, et pour un membre du personnel (niveaux 1 à 3) **dont la fiche enseignant est retrouvée** (`teacher_uid`, sinon nom dans les deux ordres, sinon e-mail, à condition qu'une seule fiche corresponde). Il garde son rôle et voit Présence et Notes de ses propres cours.
+</div>
