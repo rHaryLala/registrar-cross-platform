@@ -62,3 +62,8 @@ Ordre prudent :
 - **Une migration** : `php artisan migrate --force` joue `2026_11_18_000001_create_extra_fee_tables`, qui crée `t_frais_perso`, `t_frais_perso_montant` et `t_2024_etudiant_frais_perso` **seulement si elles manquent** (l'ancienne application les créait à la première ouverture de sa page « Gestion finance » : si cette page a déjà été ouverte en production, rien ne change). Aucune table existante n'est modifiée.
 - Le barème est dans `t_2024_finance_detail_licence` (table de l'ancienne application, colonne `session_id` : 0 = barème de base).
 - Accès niveaux 1 à 3 (comme l'ancienne page). Journal d'activité : une entrée par enregistrement, reprise, retour à la base et réglage de frais.
+
+### Documents du personnel (lot 6)
+
+- **Aucune migration.** Le PDF est fabriqué par dompdf : le dossier `storage/app/dompdf` doit être **inscriptible** par l'utilisateur de PHP-FPM (polices et fichiers temporaires). La photo est lue dans `STUDENT_PHOTOS_PATH`, comme pour la fiche de l'espace étudiant.
+- Accès niveaux 1 à 4. La réponse n'est jamais mise en cache : ne pas ajouter de cache de réponses devant `/api/v1/staff/students/*/enrollment-sheets/*/pdf`. Limite de 30 PDF par minute et par compte.

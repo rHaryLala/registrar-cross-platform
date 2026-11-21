@@ -45,6 +45,15 @@ return [
     'student_photos_path' => env('STUDENT_PHOTOS_PATH') ?: base_path('../../registrar/app/photosetudiants'),
 
     /*
+     | Bas des documents officiels (relevé de notes...) : lieu, nom de la registraire et image de sa signature.
+     | Réglages du serveur, jamais dans le code : REGISTRAR_NAME, REGISTRAR_PLACE, REGISTRAR_SIGNATURE_FILE (chemin absolu d'une image).
+     | Sans fichier de signature valide, le document porte une ligne de signature vide.
+     */
+    'place' => env('REGISTRAR_PLACE', 'Sambaina'),
+    'registrar_name' => env('REGISTRAR_NAME', ''),
+    'signature_file' => env('REGISTRAR_SIGNATURE_FILE') ?: null,
+
+    /*
      | Dossier des images d'annonces (t_annonces.image) : celui de l'ancienne application, en lecture seule.
      | En production, pointer vers le dossier app/uploads/annonces du dépôt de l'ancienne application.
      */

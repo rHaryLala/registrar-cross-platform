@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
 import { StatusChip } from "@/components/status-chip";
+import { StudentDocuments } from "@/components/student-documents";
 import { LoadError } from "@/components/teacher-common";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -121,6 +122,7 @@ function StudentSheet({ f }: { f: StudentFile }) {
       <Section title="Identité et contact">
         <Fields rows={[["Sexe", sexLabel(f.sex)], ["Né(e) le", fileDate(f.birth_date)], ["Lieu de naissance", f.birth_place], ["Nationalité", f.nationality], ["E-mail", f.email], ["Téléphone", f.phone], ["Adresse", f.address]]} />
       </Section>
+      <StudentDocuments studentRowId={f.id} />
       <Section title="Inscriptions aux cours">
         {f.enrolments.length === 0 ? (
           <p className="text-sm text-muted-foreground">Aucun cours enregistré.</p>

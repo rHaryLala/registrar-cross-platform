@@ -27,6 +27,7 @@
 | ⚖️ | [Finance : solde de compte par session](#finance--solde-de-compte-par-session) | Niveaux 1 à 4 |
 | 📅 | [Finance : échéances de paiement](#finance--échéances-de-paiement) | Niveaux 1 à 4 |
 | 🏷️ | [Finance : barème par session et frais supplémentaires](#finance--barème-par-session-et-frais-supplémentaires) | Niveaux 1 à 3 |
+| 🖨️ | [Documents : fiche d'inscription du personnel](#documents--fiche-dinscription-du-personnel) | Niveaux 1 à 4 |
 
 ---
 
@@ -248,3 +249,23 @@ Niveaux 1 à 3 (`/finance/bareme/`, sous « Plus » sur téléphone), comme l'an
 - **Tests** : 28 tests PHP dédiés ; 56 mutants des deux domaines, 55 tués et 1 équivalent (le refus d'un nom de frais déjà pris existe à deux niveaux) ; 9 tests web ; e2e Chrome (27 vérifications) : filières ouvertes seulement, héritage de la base affiché, montant illisible refusé sur place, surcharge créée depuis la base (l'écolage non transmis reste à 20 000), application à deux filières, retour à la base puis reprise, graduation au semestre 2, ajout d'un frais, montant du frais, réglage « semestre 2 », désactivation, 403 pour la comptabilité et un étudiant, 422 pour montant négatif, filière inconnue et suppression de la base.
 - **Migration** : `2026_11_18_000001_create_extra_fee_tables` crée les trois tables des frais supplémentaires **si elles manquent** (l'ancienne application les créait à la première ouverture de sa page) ; sans effet sur une base où elles existent déjà. Le barème lui-même est dans `t_2024_finance_detail_licence`, table de l'ancienne application.
 - **Non repris** : `brouillon.php` (un brouillon HTML mort, jamais inclus) et les points d'entrée `save_finance.php` / `insert_finance.php` (retirés du service dans l'ancien code, ils répondent 410).
+
+---
+
+## 🖨️ Exports et impressions
+
+Lot 6. Décision de fond (étude 05 §7) : **les documents officiels sont de vrais PDF fabriqués par le serveur** (même rendu partout, texte sélectionnable, aucune dépendance à un CDN) ; l'ancienne application « imprimait » une page HTML en image (`html2pdf`, 21 types de documents dans `src/data.topdf.php`, environ 2 200 appels en deux mois). Les listes iront en XLSX et CSV.
+
+### Documents : fiche d'inscription du personnel
+
+Port de `Fiche_inscription` (710 appels en deux mois, le premier document imprimé). Depuis la **fiche d'un étudiant** (`/etudiants/fiche/?id=…`), le bloc **Documents** propose une fiche d'inscription en PDF **par session** de l'étudiant.
+
+- **Même document que celui de l'étudiant** : les montants, les lignes et le PDF sortent de la même fabrique que « Mes inscriptions » (`Enrollments`, `EnrollmentPdf`), donc de la même preuve de parité. Ce qui change est l'accès : `GET /api/v1/staff/students/{id}/enrollment-sheets` (la liste des sessions) et `…/{session}/pdf` (le PDF).
+- **Toutes les inscriptions, y compris celles que l'étudiant ne voit pas** : l'espace étudiant ne montre les fiches de Licence qu'à partir de 2026-2027 et peut masquer la rubrique ; le personnel garde accès à toutes les années, comme l'ancien code. La liste dit avant d'imprimer le nombre de cours et si la session a une ligne financière (« sans ligne financière » : la fiche ne vaut pas justificatif de paiement).
+- **Droits** : niveaux 1 à 4 (superadmin, administration, registrariat, **comptabilité**). La fiche porte des montants et un mode de paiement : le média, le chef de mention, l'enseignant et l'étudiant n'y ont pas accès (403, vérifié **avant** de chercher l'étudiant : un compte sans droit ne peut pas distinguer un étudiant qui existe d'un autre). L'ancien code laissait tout le personnel ouvrir tout document : **à confirmer** pour la comptabilité (un seul réglage, `StaffEnrollmentSheets::allows`).
+- **Périmètre** : un compte limité à un cycle ne trouve pas un étudiant d'un autre cycle, ni un étudiant sans niveau (404 « introuvable », comme dans les listes). L'étudiant est désigné par l'identifiant de sa ligne, jamais par un matricule saisi ; la session doit être une inscription de CET étudiant.
+- **PDF** : jamais mis en cache (`private, no-store`), `nosniff`, nom de fichier sûr (`DEMO-0001-fiche-inscription-Session-1-2026-2027.pdf`), photo de l'étudiant intégrée si elle existe, 30 demandes par minute et par compte.
+- **Parité** avec l'ancien code, en exécutant la VRAIE `fiche_inscription.php` sur les données réelles locales pour **toutes** les inscriptions, toutes années (2 296 fiches) : cours, crédits, coût des cours, laboratoire, sous-total, total général et tranches identiques sur les **2 295** comparables, 0 écart. Seuls écarts : la ligne « Frais costume » que l'ancienne fiche comptait sans la montrer (150 fiches, écart assumé de la fiche étudiante). Une inscription n'a pas de fiche : celle d'un matricule qui n'a plus de dossier étudiant (`20480`, 7 cours) ; l'entrée du nouvel écran est la fiche de l'étudiant, il n'y a donc rien à ouvrir.
+- **Tests** : 17 tests PHP dédiés ; 20 mutants, 20 tués (deux survivants initiaux, « niveau 0 admis » et « photo absente du PDF », ont donné deux tests) ; 5 tests web ; e2e Chrome (9 vérifications) : liste par l'API, bloc Documents, téléchargement d'un vrai PDF avec photo, mise en page sans défilement horizontal, comptabilité et superadmin admis, 403 pour un étudiant (même réponse pour un étudiant inexistant), 404 pour un étudiant ou une session inconnus.
+- **Aucune migration**.
+- **Pas encore repris** (à venir dans le lot 6) : certificat de scolarité, badge, relevé semestriel, bulletin, listes en XLSX et CSV.

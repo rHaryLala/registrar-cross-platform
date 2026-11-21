@@ -2229,6 +2229,82 @@ console.log("\n7l. Finance : barème par session et frais supplémentaires");
   check("côté serveur : montant négatif (422), filière inconnue (422), suppression du barème de base (422)", bad.map((r) => r.status).join("/") === "422/422/422", bad.map((r) => r.status).join("/"));
 }
 
+
+console.log("\n7m. Documents : fiche d'inscription du personnel (PDF serveur)");
+{
+  const API = "http://localhost:8000";
+  const apiAs = async (pseudo, password) => {
+    const jar = {};
+    const take = (res) => { for (const c of res.headers.getSetCookie?.() ?? []) { const [kv] = c.split(";"); const i = kv.indexOf("="); jar[kv.slice(0, i)] = kv.slice(i + 1); } };
+    const base = { Origin: WEB, Referer: WEB + "/", Accept: "application/json" };
+    take(await fetch(API + "/api/v1/auth/csrf", { headers: base }));
+    const call = async (method, p, body) => {
+      const res = await fetch(API + p, { method, headers: { ...base, "Content-Type": "application/json", Cookie: Object.entries(jar).map(([k, v]) => `${k}=${v}`).join("; "), "X-XSRF-TOKEN": decodeURIComponent(jar["XSRF-TOKEN"] ?? "") }, body: body ? JSON.stringify(body) : undefined });
+      take(res);
+      return { status: res.status, json: await res.json().catch(() => null) };
+    };
+    await call("POST", "/api/v1/auth/login", { identifier: pseudo, password });
+    return call;
+  };
+  const reg = await apiAs("registraire.demo", PASSWORD);
+  const row = (await reg("GET", "/api/v1/staff/lists/students?q=DEMO-0001")).json.data.rows.find((r) => r.student_id === "DEMO-0001");
+  check("le registraire retrouve l'étudiant de démonstration dans la liste (identifiant de ligne)", !!row?.id, JSON.stringify(row));
+  const rowId = row.id;
+  const listed = await reg("GET", `/api/v1/staff/students/${rowId}/enrollment-sheets`);
+  check("l'API liste les inscriptions de l'étudiant (session, niveau, nombre de cours, frais)", listed.status === 200 && listed.json.data.student_id === "DEMO-0001" && listed.json.data.sessions.map((s) => s.session_name).join() === "Session 2,Session 1" && listed.json.data.sessions.every((s) => s.year === "2026 - 2027"), JSON.stringify(listed.json).slice(0, 200));
+
+  await go("/login/");
+  await type("#identifier", "registraire.demo");
+  await type("#password", PASSWORD);
+  await submit();
+  await until("location.pathname === '/'", "accueil registraire (documents)");
+  await go(`/etudiants/fiche/?id=${rowId}`);
+  await until("!!document.querySelector('[data-slot=documents]') && /Session 1/.test(document.querySelector('[data-slot=documents]').innerText)", "bloc Documents", 25000);
+  const docs = await ev("document.querySelector('[data-slot=documents]').innerText.replace(/\\s+/g, ' ')");
+  check("la fiche de l'étudiant a un bloc « Documents » : l'année, la session et le nombre de cours", /Documents/.test(docs) && /2026 - 2027/.test(docs) && /Session 1/.test(docs) && /Session 2/.test(docs) && /cours/.test(docs), docs.slice(0, 200));
+
+  rmSync(join(OUT, "DEMO-0001-fiche-inscription-Session-1-2026-2027.pdf"), { force: true });
+  await ev("[...document.querySelectorAll('[data-slot=documents] button')].find(b => /Session 1 2026 - 2027/.test(b.getAttribute('aria-label') ?? '')).click()");
+  check("le PDF se télécharge depuis la fiche (message avec le nom du fichier)", await until("/PDF téléchargé : DEMO-0001-fiche-inscription-Session-1-2026-2027\.pdf/.test(document.querySelector('[data-slot=documents]').innerText)", "téléchargement du personnel", 30000));
+  await sleep(500);
+  const staffPdf = join(OUT, "DEMO-0001-fiche-inscription-Session-1-2026-2027.pdf");
+  check("le fichier reçu est un vrai PDF (en-tête %PDF-, plus de 5 Ko, photo intégrée)", existsSync(staffPdf) && readFileSync(staffPdf).subarray(0, 5).toString("latin1") === "%PDF-" && statSync(staffPdf).size > 5000 && readFileSync(staffPdf).toString("latin1").includes("/Subtype /Image"), existsSync(staffPdf) ? String(statSync(staffPdf).size) : "absent");
+  await shot("07m-documents-personnel");
+  const lay = JSON.parse(await ev(`JSON.stringify({ scroll: document.documentElement.scrollWidth, inner: innerWidth, h1: document.querySelectorAll('h1').length, sansNom: [...document.querySelectorAll('a,button,input,select')].filter(e => !(e.getAttribute('aria-label') || e.innerText || e.title || '').trim()).length })`));
+  check("fiche étudiant avec documents : aucun défilement horizontal, un seul h1, contrôles nommés", lay.scroll <= lay.inner && lay.h1 === 1 && lay.sansNom === 0, JSON.stringify(lay));
+  // --- relevé semestriel des notes (toutes les sessions, publiées ou non)
+  const tOpts = await reg("GET", `/api/v1/staff/students/${rowId}/transcript`);
+  check("l'API liste les sessions avec notes, y compris la session NON publiée que l'étudiant ne voit pas", tOpts.status === 200 && tOpts.json.data.sessions.length === 2 && tOpts.json.data.sessions.map((s) => s.session_name).join() === "Session 1,Session 2", JSON.stringify(tOpts.json).slice(0, 220));
+  await until("!!document.querySelector('[data-slot=transcript] select')", "sélecteur du relevé", 20000);
+  const choices = await ev("[...document.querySelectorAll('[data-slot=transcript] select option')].map(o => o.textContent.trim())");
+  check("le sélecteur propose tout l'historique puis chaque session avec son nombre de cours", choices[0] === "Tout l’historique (2 sessions)" && choices.some((c) => /^Session 1 · 2025-2026 \(5 cours\)$/.test(c)) && choices.some((c) => /^Session 2 · 2025-2026 \(1 cours\)$/.test(c)), JSON.stringify(choices));
+  rmSync(join(OUT, "DEMO-0001-releve-semestriel.pdf"), { force: true });
+  await ev("[...document.querySelectorAll('[data-slot=transcript] button')].find(b => /Télécharger le relevé/.test(b.getAttribute('aria-label') ?? '')).click()");
+  check("le relevé se télécharge depuis la fiche (message avec le nom du fichier)", await until("/PDF téléchargé : DEMO-0001-releve-semestriel\\.pdf/.test(document.querySelector('[data-slot=transcript]').innerText)", "téléchargement du relevé", 30000));
+  await sleep(500);
+  const trPdf = join(OUT, "DEMO-0001-releve-semestriel.pdf");
+  check("le relevé reçu est un vrai PDF (en-tête %PDF-, plus de 3 Ko, photo intégrée)", existsSync(trPdf) && readFileSync(trPdf).subarray(0, 5).toString("latin1") === "%PDF-" && statSync(trPdf).size > 3000 && readFileSync(trPdf).toString("latin1").includes("/Subtype /Image"), existsSync(trPdf) ? String(statSync(trPdf).size) : "absent");
+  const trYear = await reg("GET", `/api/v1/staff/students/${rowId}/transcript/pdf?year=2025-2026`);
+  check("le relevé d'une année est servi (200)", trYear.status === 200);
+  const trBad = [await reg("GET", `/api/v1/staff/students/${rowId}/transcript/pdf?year=2O25`), await reg("GET", `/api/v1/staff/students/${rowId}/transcript/pdf?semester=9`), await reg("GET", `/api/v1/staff/students/999999/transcript/pdf`)];
+  check("côté serveur : année illisible (422), semestre hors limites (422), étudiant inconnu (404)", trBad.map((r) => r.status).join("/") === "422/422/404", trBad.map((r) => r.status).join("/"));
+  await shot("07n-releve-semestriel");
+  await ev("document.querySelector('button[aria-label^=\"Se déconnecter\"]').click()");
+  await until("location.pathname.startsWith('/login')", "déconnexion registraire (documents)");
+
+  // --- les droits : niveaux 1 à 4 ; le reste est refusé par le serveur, avant toute recherche
+  const cash = await apiAs("ancien.demo", PASSWORD);
+  const sup = await apiAs("superadmin.demo", PASSWORD);
+  const student = await apiAs("etudiant.demo", PASSWORD);
+  const url = `/api/v1/staff/students/${rowId}/enrollment-sheets`;
+  const sessionId = listed.json.data.sessions[0].session_id;
+  check("la comptabilité (niveau 4) et le superadmin ouvrent la liste et le PDF", (await cash("GET", url)).status === 200 && (await sup("GET", url)).status === 200);
+  const denied = [await student("GET", url), await student("GET", `${url}/${sessionId}/pdf`), await student("GET", `/api/v1/staff/students/999999/enrollment-sheets`)];
+  check("un étudiant n'ouvre ni la liste ni le PDF, même par l'API (403 avant toute recherche : même réponse pour un étudiant inexistant)", denied.every((r) => r.status === 403 && r.json?.code === "forbidden.documents"), denied.map((r) => r.status).join("/"));
+  const missing = [await reg("GET", "/api/v1/staff/students/999999/enrollment-sheets"), await reg("GET", `${url}/999999/pdf`)];
+  check("étudiant ou session inconnus : 404", missing.every((r) => r.status === 404), missing.map((r) => r.status).join("/"));
+}
+
 console.log("\n8. Journal de la console et du réseau");
 check("aucune erreur JavaScript ni requête en échec", problems.length === 0, problems.slice(0, 3).join(" | "));
 

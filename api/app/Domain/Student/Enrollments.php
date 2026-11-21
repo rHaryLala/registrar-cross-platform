@@ -78,10 +78,53 @@ final class Enrollments
             return null;
         }
 
+        return $this->build($studentId, $sessionId, true);
+    }
+
+    /**
+     * La même fiche, demandée PAR LE PERSONNEL (registrariat, comptabilité) : toute inscription de l'étudiant, y compris les
+     * années que l'étudiant ne voit pas encore, et même si la rubrique est masquée dans son espace. Aucun droit n'est vérifié ici :
+     * l'appelant (App\Domain\Documents\StaffEnrollmentSheets) le fait.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function sheetForStaff(string $studentId, int $sessionId): ?array
+    {
+        return $this->build($studentId, $sessionId, false);
+    }
+
+    /**
+     * Les sessions où l'étudiant est inscrit, de la plus récente à la plus ancienne, sans la règle de visibilité de l'espace étudiant.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function sessionsForStaff(string $studentId): array
+    {
+        $studentLevel = DB::table('tbl_2024_etudiant')->where('student_id', $studentId)->orderBy('remove')->orderByDesc('annee_scolaire')->value('annee_etude');
+
+        return $this->enrollmentRows($studentId)->map(function ($r) use ($studentId, $studentLevel) {
+            $level = EnrollmentRules::level($r->niveau_std, $studentLevel);
+
+            return [
+                'session_id' => (int) $r->session_id,
+                'session_name' => $r->session_name,
+                'year' => $r->session_year,
+                'level_label' => $level === null ? null : EnrollmentRules::levels()[$level]['label'],
+                'mention' => $r->etude_mention ?: null,
+                'enrolled_on' => $this->date($r->date_entry),
+                'courses' => (int) $r->nb_cours,
+                'has_fees' => $this->financeRow($studentId, (int) $r->session_id) !== null,
+            ];
+        })->values()->all();
+    }
+
+    /** @return array<string, mixed>|null */
+    private function build(string $studentId, int $sessionId, bool $studentRules): ?array
+    {
         $student = DB::table('tbl_2024_etudiant')->where('student_id', $studentId)->orderBy('remove')->orderByDesc('annee_scolaire')->first();
         $enrollment = $this->enrollmentRows($studentId)->first(fn ($r) => (int) $r->session_id === $sessionId);
         if ($student === null || $enrollment === null
-            || ! EnrollmentRules::sheetVisible((string) $enrollment->session_year, $enrollment->niveau_std, $student->annee_etude)) {
+            || ($studentRules && ! EnrollmentRules::sheetVisible((string) $enrollment->session_year, $enrollment->niveau_std, $student->annee_etude))) {
             return null;
         }
 

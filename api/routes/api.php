@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\V1\ReenrolmentController;
 use App\Http\Controllers\Api\V1\TariffController;
 use App\Http\Controllers\Api\V1\ReviewAttendanceController;
 use App\Http\Controllers\Api\V1\StudentCreationController;
+use App\Http\Controllers\Api\V1\StaffDocumentsController;
 use App\Http\Controllers\Api\V1\ReviewRemiseController;
 use Illuminate\Support\Facades\Route;
 
@@ -135,6 +136,12 @@ Route::prefix('v1')->group(function () {
             Route::put('finance/balances/{session}/{student}', [BalancesController::class, 'update'])->whereNumber('session')->where('student', '[0-9]{1,10}')->middleware('throttle:teacher-write');
             Route::get('lists/{list}', [DirectoryController::class, 'index'])->whereIn('list', ['students', 'courses', 'teachers']);
             Route::get('students/{id}', [DirectoryController::class, 'student'])->whereNumber('id');
+            // Documents imprimables d'un étudiant (lot 6) : la fiche d'inscription, une par session (niveaux 1 à 4, périmètre de cycle appliqué).
+            Route::get('students/{id}/enrollment-sheets', [StaffDocumentsController::class, 'enrollmentSheets'])->whereNumber('id');
+            Route::get('students/{id}/enrollment-sheets/{session}/pdf', [StaffDocumentsController::class, 'enrollmentSheetPdf'])->whereNumber('id')->whereNumber('session')->middleware('throttle:30,1');
+            // Relevé semestriel des notes (filtres facultatifs : year, semester, level, session).
+            Route::get('students/{id}/transcript', [StaffDocumentsController::class, 'transcriptOptions'])->whereNumber('id');
+            Route::get('students/{id}/transcript/pdf', [StaffDocumentsController::class, 'transcriptPdf'])->whereNumber('id')->middleware('throttle:30,1');
             Route::get('courses/{id}', [DirectoryController::class, 'course'])->whereNumber('id');
             Route::get('teachers/{id}', [DirectoryController::class, 'teacher'])->whereNumber('id');
         });
