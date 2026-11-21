@@ -142,6 +142,8 @@ Route::prefix('v1')->group(function () {
             // Relevé semestriel des notes (filtres facultatifs : year, semester, level, session).
             Route::get('students/{id}/transcript', [StaffDocumentsController::class, 'transcriptOptions'])->whereNumber('id');
             Route::get('students/{id}/transcript/pdf', [StaffDocumentsController::class, 'transcriptPdf'])->whereNumber('id')->middleware('throttle:30,1');
+            // Certificat de scolarité (niveaux 1 à 3 et chefs de mention, pour leur mention).
+            Route::get('students/{id}/certificate/pdf', [StaffDocumentsController::class, 'certificatePdf'])->whereNumber('id')->middleware('throttle:30,1');
             Route::get('courses/{id}', [DirectoryController::class, 'course'])->whereNumber('id');
             Route::get('teachers/{id}', [DirectoryController::class, 'teacher'])->whereNumber('id');
         });

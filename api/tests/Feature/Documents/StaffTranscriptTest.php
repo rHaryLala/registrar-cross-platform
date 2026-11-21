@@ -135,6 +135,8 @@ class StaffTranscriptTest extends TestCase
         $this->makeNote($id, $this->s1, 'Supprimé', '9', 3, ['remove' => 1]);   // supprimé
         $s3 = $this->makeSession('Session 3', '2027 - 2028', 1);
         $this->makeNote($id, $s3, 'Vide', '9', 3, ['ajout' => 0]);               // session sans aucun cours retenu
+        $s4 = $this->makeSession('Session 4', '2028 - 2029', 1);
+        $this->makeNote($id, $s4, 'Supprimé seul', '9', 3, ['remove' => 1]);     // session dont le seul cours est supprimé
 
         $data = $this->optionsAs($this->staff(3, 'registrar'), $this->rowId($id))->assertOk()->json('data');
 
@@ -160,6 +162,11 @@ class StaffTranscriptTest extends TestCase
         $this->makeNote($id, $this->s1, 'Spirituelle', '12', 1, ['Sigle' => 'REL 100', 'cours_category' => 5]);     // validation : V
         $this->makeNote($id, $this->s1, 'Formation spirituelle', '6', 2, ['Sigle' => 'FSP 100', 'cours_category' => 0]); // validation : E
         $this->makeNote($id, $this->s1, 'Virgule', '12,5', 2, ['Sigle' => 'VIR 101', 'cours_category' => 2]);       // virgule décimale
+        $this->makeNote($id, $this->s1, 'Texte', 'abc', 1, ['Sigle' => 'TXT 101', 'cours_category' => 3]);          // texte : pas encore noté
+        $this->makeNote($id, $this->s1, 'Vide', '', 1, ['Sigle' => 'VID 101', 'cours_category' => null]);          // vide, catégorie vide
+        $this->makeNote($id, $this->s1, 'Validation dix', '10', 1, ['Sigle' => 'VAL 010', 'cours_category' => 5]);  // validation à 10 pile : V
+        $this->makeNote($id, $this->s1, 'Validation un', '1', 1, ['Sigle' => 'VAL 001', 'cours_category' => 5]);    // validation à 1 : E
+        $this->makeNote($id, $this->s1, 'Inconnue', '15', 1, ['Sigle' => 'CAT 004', 'cours_category' => 4]);        // catégorie inconnue
 
         $s = $this->build($id)['sessions'][0];
         $by = array_column($s['courses'], null, 'code');
@@ -174,14 +181,24 @@ class StaffTranscriptTest extends TestCase
         $this->assertSame(['E', null, 'failed', 'validation'], [$by['FSP 100']['note'], $by['FSP 100']['points'], $by['FSP 100']['state'], $by['FSP 100']['category']]);
         $this->assertSame(['12.5', 25.0, 'valid', 'Sélective'], [$by['VIR 101']['note'], $by['VIR 101']['points'], $by['VIR 101']['state'], $by['VIR 101']['category']]);
 
-        // Entrent dans la moyenne : INF 101 (3 × 14), MAT 101 (2 × 8) et VIR 101 (2 × 12,5) : 42 + 16 + 25 = 83 points pour 7 crédits.
-        $this->assertSame(83.0, $s['totals']['points']);
-        $this->assertSame(34.5, $s['totals']['grades']);     // 14 + 8 + 12,5
-        $this->assertSame(21, $s['totals']['credits']);      // tous les crédits, même hors moyenne
-        $this->assertSame(9, $s['totals']['courses']);
-        $this->assertSame(round(83 / 7, 2), $s['averages']['general']);
+        $this->assertSame(['NN', null, 'incomplete'], [$by['TXT 101']['note'], $by['TXT 101']['points'], $by['TXT 101']['state']]);
+        $this->assertSame(['NN', '-', 'incomplete'], [$by['VID 101']['note'], $by['VID 101']['category'], $by['VID 101']['state']]);
+        $this->assertSame(['V', 'valid'], [$by['VAL 010']['note'], $by['VAL 010']['state']]);
+        $this->assertSame(['E', 'failed'], [$by['VAL 001']['note'], $by['VAL 001']['state']]);
+        $this->assertSame(['-', 'Additionnel'], [$by['CAT 004']['category'], $by['TXT 101']['category']]);
+
+        // Entrent dans la moyenne : INF 101 (3 × 14), MAT 101 (2 × 8), VIR 101 (2 × 12,5) et CAT 004 (1 × 15) : 42 + 16 + 25 + 15 = 98 points pour 8 crédits.
+        $this->assertSame(98.0, $s['totals']['points']);
+        $this->assertSame(49.5, $s['totals']['grades']);     // 14 + 8 + 12,5 + 15
+        $this->assertSame(26, $s['totals']['credits']);      // tous les crédits, même hors moyenne
+        $this->assertSame(14, $s['totals']['courses']);
+        $this->assertSame(round(98 / 8, 2), $s['averages']['general']);
         $this->assertSame(14.0, $s['averages']['major']);    // seul INF 101 est majeur ET compte (STG 101 est NN)
-        $this->assertSame(['valid_courses' => 4, 'valid_credits' => 10, 'failed_courses' => 3, 'failed_credits' => 5, 'incomplete_courses' => 2, 'incomplete_credits' => 6], $s['recap']);
+        $expected = ['valid_courses' => 6, 'valid_credits' => 12, 'failed_courses' => 4, 'failed_credits' => 6, 'incomplete_courses' => 4, 'incomplete_credits' => 8];
+        $this->assertSame($expected, $s['recap']);
+        // Le récapitulatif général d'une seule session reprend les mêmes nombres.
+        $sum = $this->build($id)['summary'];
+        $this->assertSame([6, 12, 4, 6, 4, 8, 26, 14, 1], [$sum['valid_courses'], $sum['valid_credits'], $sum['failed_courses'], $sum['failed_credits'], $sum['incomplete_courses'], $sum['incomplete_credits'], $sum['credits'], $sum['courses'], $sum['sessions']]);
     }
 
     public function test_an_average_without_any_counted_grade_is_absent_not_zero(): void
@@ -213,10 +230,12 @@ class StaffTranscriptTest extends TestCase
         $this->makeNote($id, $s3, 'C', '12', 3, ['yearlevel' => 4]);
         $s4 = $this->makeSession('Session 4', '2028 - 2029', 1);
         $this->makeNote($id, $s4, 'D', '12', 3, ['yearlevel' => 0]);
+        $s5 = $this->makeSession('Session 5', '2029 - 2030', 1);
+        $this->makeNote($id, $s5, 'E', '12', 3, ['yearlevel' => 3]);
 
         $levels = array_column($this->build($id)['sessions'], 'level_label');
 
-        $this->assertSame(['Licence 1', 'Licence 2', 'Master 1', 'Remise à niveau'], $levels);   // égalité 1/2 : le plus élevé
+        $this->assertSame(['Licence 1', 'Licence 2', 'Master 1', 'Remise à niveau', 'Licence 3'], $levels);   // égalité 1/2 : le plus élevé
     }
 
     public function test_sessions_are_ordered_by_year_then_semester_and_the_cumulative_adds_credits_and_points_not_averages(): void
@@ -233,6 +252,7 @@ class StaffTranscriptTest extends TestCase
 
         $this->assertSame([$c, $b, $a], array_column(array_column($t['sessions'], 'session'), 'id'));
         $this->assertSame(round((10 + 180) / 10, 2), $t['cumulative']['general']);
+        $this->assertSame(19.0, $t['cumulative']['major']);       // catégorie 1 par défaut : mêmes points et crédits que la générale
         $this->assertSame(10, $t['summary']['credits']);
         $this->assertSame(3, $t['summary']['sessions']);
         $this->assertSame(3, $t['summary']['courses']);
@@ -264,13 +284,16 @@ class StaffTranscriptTest extends TestCase
         $this->makePromotion(8000, $this->s1, 16.0, 11.0, 14.0);
         $this->makePromotion(8000, $this->s1, 1.0, 1.0, 1.0);        // doublon : seule la première ligne compte, comme l'ancien fetch()
         $this->makePromotion(8000, $this->s2, 0.0, 12.0, 18.0);      // work à 0 : ignoré du cumul (comme l'ancien !empty)
+        $s3 = $this->makeSession('Session 3', '2027 - 2028', 1);
+        $this->makeNote($id, $s3, 'C', '12');
+        $this->makePromotion(8000, $s3, 14.0, 10.0, 0.0);            // chapelle à 0 : ignorée du cumul
 
         $t = $this->build($id);
 
         $this->assertSame(16.0, $t['sessions'][0]['promotion']['work_education']);
         $this->assertSame(14.0, $t['sessions'][0]['promotion']['chapel']);
-        $this->assertSame(16.0, $t['cumulative']['work_education']);               // une seule session renseignée
-        $this->assertSame(round((14 + 18) / 2, 2), $t['cumulative']['chapel']);    // deux sessions renseignées
+        $this->assertSame(round((16 + 14) / 2, 2), $t['cumulative']['work_education']);   // deux sessions renseignées (la deuxième est à 0)
+        $this->assertSame(round((14 + 18) / 2, 2), $t['cumulative']['chapel']);            // deux sessions renseignées (la troisième est à 0)
     }
 
     public function test_a_matricule_that_is_not_numeric_never_reads_another_students_promotion_grades(): void
@@ -385,6 +408,35 @@ class StaffTranscriptTest extends TestCase
             file_put_contents($dir.DIRECTORY_SEPARATOR.'faux.png', 'pas une image');
             config(['registrar.signature_file' => $dir.DIRECTORY_SEPARATOR.'faux.png']);                    // pas une image : refusée
             $this->assertStringNotContainsString('/Subtype /Image', $this->pdfAs($reg, $row)->getContent());
+        } finally {
+            foreach (glob($dir.'/*') ?: [] as $f) {
+                @unlink($f);
+            }
+            @rmdir($dir);
+        }
+    }
+
+    public function test_the_students_photo_is_embedded_and_an_oversized_signature_is_refused(): void
+    {
+        $this->sessions();
+        $id = $this->student();
+        $this->makeNote($id, $this->s1, 'Algo', '14');
+        $row = $this->rowId($id);
+        $reg = $this->staff(3, 'registrar');
+        $dir = sys_get_temp_dir().DIRECTORY_SEPARATOR.'photos-tr-'.bin2hex(random_bytes(4));
+        mkdir($dir, 0777, true);
+        $photo = imagecreatetruecolor(300, 400);
+        imagefill($photo, 0, 0, imagecolorallocate($photo, 30, 120, 160));
+        imagejpeg($photo, $dir.DIRECTORY_SEPARATOR.'8000.jpg', 80);
+        $big = imagecreatetruecolor(3500, 3500);                      // 12,25 millions de pixels : au-dessus du plafond
+        imagepng($big, $dir.DIRECTORY_SEPARATOR.'grande.png', 9);
+        $this->setStudentFile($id, ['image_student' => '8000.jpg']);
+        config(['registrar.student_photos_path' => $dir, 'registrar.signature_file' => $dir.DIRECTORY_SEPARATOR.'grande.png']);
+
+        try {
+            $this->assertStringContainsString('/Subtype /Image', $this->pdfAs($reg, $row)->assertOk()->getContent());   // la photo, pas la signature
+            $this->setStudentFile($id, ['image_student' => '']);
+            $this->assertStringNotContainsString('/Subtype /Image', $this->pdfAs($reg, $row)->assertOk()->getContent()); // ni photo ni signature
         } finally {
             foreach (glob($dir.'/*') ?: [] as $f) {
                 @unlink($f);

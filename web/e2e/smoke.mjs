@@ -2259,7 +2259,7 @@ console.log("\n7m. Documents : fiche d'inscription du personnel (PDF serveur)");
   await submit();
   await until("location.pathname === '/'", "accueil registraire (documents)");
   await go(`/etudiants/fiche/?id=${rowId}`);
-  await until("!!document.querySelector('[data-slot=documents]') && /Session 1/.test(document.querySelector('[data-slot=documents]').innerText)", "bloc Documents", 25000);
+  await until("document.querySelectorAll('[data-slot=documents] li').length >= 2", "bloc Documents (fiches d'inscription chargées)", 25000);
   const docs = await ev("document.querySelector('[data-slot=documents]').innerText.replace(/\\s+/g, ' ')");
   check("la fiche de l'étudiant a un bloc « Documents » : l'année, la session et le nombre de cours", /Documents/.test(docs) && /2026 - 2027/.test(docs) && /Session 1/.test(docs) && /Session 2/.test(docs) && /cours/.test(docs), docs.slice(0, 200));
 
@@ -2275,6 +2275,8 @@ console.log("\n7m. Documents : fiche d'inscription du personnel (PDF serveur)");
   // --- relevé semestriel des notes (toutes les sessions, publiées ou non)
   const tOpts = await reg("GET", `/api/v1/staff/students/${rowId}/transcript`);
   check("l'API liste les sessions avec notes, y compris la session NON publiée que l'étudiant ne voit pas", tOpts.status === 200 && tOpts.json.data.sessions.length === 2 && tOpts.json.data.sessions.map((s) => s.session_name).join() === "Session 1,Session 2", JSON.stringify(tOpts.json).slice(0, 220));
+  // Chrome demande une autorisation pour un second téléchargement automatique sur la même page : on recharge, comme le ferait un second clic de l'utilisateur.
+  await go(`/etudiants/fiche/?id=${rowId}`);
   await until("!!document.querySelector('[data-slot=transcript] select')", "sélecteur du relevé", 20000);
   const choices = await ev("[...document.querySelectorAll('[data-slot=transcript] select option')].map(o => o.textContent.trim())");
   check("le sélecteur propose tout l'historique puis chaque session avec son nombre de cours", choices[0] === "Tout l’historique (2 sessions)" && choices.some((c) => /^Session 1 · 2025-2026 \(5 cours\)$/.test(c)) && choices.some((c) => /^Session 2 · 2025-2026 \(1 cours\)$/.test(c)), JSON.stringify(choices));

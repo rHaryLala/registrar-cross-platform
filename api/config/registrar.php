@@ -54,6 +54,12 @@ return [
     'signature_file' => env('REGISTRAR_SIGNATURE_FILE') ?: null,
 
     /*
+     | Dossier `file/` de l'ancienne application, en lecture seule : logo, fonds de badge. Les documents officiels y lisent leurs images ;
+     | un fichier absent n'est jamais une erreur (le document s'imprime sans l'image). En production, pointer vers le dossier file/ de l'ancienne application.
+     */
+    'legacy_files_path' => env('LEGACY_FILES_PATH') ?: base_path('../../registrar/file'),
+
+    /*
      | Dossier des images d'annonces (t_annonces.image) : celui de l'ancienne application, en lecture seule.
      | En production, pointer vers le dossier app/uploads/annonces du dépôt de l'ancienne application.
      */

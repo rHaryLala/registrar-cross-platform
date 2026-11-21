@@ -14,9 +14,9 @@ Web · Android · iOS · Windows · macOS — une seule application (PWA), sur l
 ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?style=flat-square&logo=mysql&logoColor=white)
 ![PWA](https://img.shields.io/badge/PWA-hors%20ligne-5A0FC8?style=flat-square&logo=pwa&logoColor=white)
 
-![Tests PHP](https://img.shields.io/badge/tests%20PHP-1006-1a2b6a?style=flat-square)
-![Tests web](https://img.shields.io/badge/tests%20web-356-1a2b6a?style=flat-square)
-![e2e Chrome](https://img.shields.io/badge/e2e%20Chrome-546%2F546-00c4d4?style=flat-square)
+![Tests PHP](https://img.shields.io/badge/tests%20PHP-1024-1a2b6a?style=flat-square)
+![Tests web](https://img.shields.io/badge/tests%20web-361-1a2b6a?style=flat-square)
+![e2e Chrome](https://img.shields.io/badge/e2e%20Chrome-551%2F552-00c4d4?style=flat-square)
 ![Lots](https://img.shields.io/badge/lots-5%20sur%208-00c4d4?style=flat-square)
 
 [Démarrer](#-démarrer-en-5-minutes) ·
@@ -94,7 +94,7 @@ Cinq lots sur huit sont terminés. Plan détaillé : [`docs/PLAN-PAGES.md`](docs
 | **3** | **Espace enseignant** : présence (hors ligne), remise de notes à colonnes libres | `█████████░` | 🟢 fait, reste le tableau de bord enseignant |
 | **4** | **Registrariat** : validation des notes, assiduité, listes et fiches, tableau de bord, candidatures, création d'étudiant | `██████████` | ✅ fait |
 | **5** | **Finance** : réinscription, soldes, échéances, barème et frais supplémentaires | `██████████` | ✅ fait |
-| **6** | **Exports et impressions** : vrai PDF serveur pour les documents officiels, XLSX et CSV pour les listes | `██░░░░░░░░` | 🟡 en cours : fiche d'inscription du personnel faite |
+| **6** | **Exports et impressions** : vrai PDF serveur pour les documents officiels, XLSX et CSV pour les listes | `████░░░░░░` | 🟡 en cours : fiche d'inscription, relevé semestriel et certificat de scolarité faits |
 | **7** | Messagerie, inscriptions au guichet, file d'attente, emploi du temps, outils | `░░░░░░░░░░` | ⏳ à venir |
 | **8** | Les 53 pages **jamais ouvertes** en deux mois | `░░░░░░░░░░` | 💤 restent sur l'ancien PHP |
 
@@ -118,7 +118,7 @@ Cinq lots sur huit sont terminés. Plan détaillé : [`docs/PLAN-PAGES.md`](docs
 | 🎓 **Étudiant** (niveau 8) | Accueil · **Mes notes** · **Ma présence** · **Mes inscriptions** (fiche PDF) · **Mes informations** · Actualités · Quiz · Jeu |
 | 🧑‍🏫 **Enseignant** (7), chef de mention (6), personnel qui enseigne | **Présence** (appel, **hors ligne**) · **Remise de notes** (colonnes libres) |
 | 🗂️ **Registrariat** (niveaux 1 à 3) | Tableau de bord · **Validation des remises** (annulable 10 s) · Étudiants, cours, enseignants · Candidatures · Création d'étudiant · Assiduité (superadmin et registrariat) |
-| 🖨️ **Documents** (niveaux 1 à 4) | **Fiche d'inscription en PDF**, par session, depuis la fiche d'un étudiant |
+| 🖨️ **Documents** | **Fiche d'inscription** et **relevé semestriel** en PDF (niveaux 1 à 4) · **certificat de scolarité** (niveaux 1 à 3 et chef de mention, limité à sa mention), depuis la fiche d'un étudiant |
 | 💰 **Finance** | **Réinscription** (niveaux 1, 3, 4) · **Soldes** (1 à 4) · **Échéances** (1 à 4) · **Barème** (1 à 3) |
 
 Niveaux : 1 superadmin · 2 administration · 3 registrariat · 4 comptabilité · 5 media · 6 chef de mention · 7 enseignant · 8 étudiant · 9 Work Education. Les droits sont **revérifiés par le serveur à chaque appel** (403 avant toute validation) : masquer un bouton ne suffit jamais.
@@ -172,9 +172,9 @@ Dossier `api/`, PHP 8.3 explicite : `php artisan serve --host=127.0.0.1 --port=8
 
 | Suite | Nombre | Ce qu'elle couvre |
 |---|---|---|
-| 🐘 **PHP** (`api/`) | **1 006** | connexion, Google (vraie cryptographie), notes, assiduité, fiches d'inscription, quiz, registrariat, finance, erreurs |
-| ⚛️ **Web** (`web/`) | **356** | client d'API (CSRF, réessai sur 419, hors réseau), formats, calculs, reprise après échec de chargement |
-| 🌐 **e2e Chrome** | **546** vérifications | parcours réels dans un vrai navigateur, dont le téléchargement d'un vrai PDF, la connexion par la fiche, les Actualités et la résolution réelle du Rubik's Cube. Base **de démonstration** uniquement. |
+| 🐘 **PHP** (`api/`) | **1 024** | connexion, Google (vraie cryptographie), notes, assiduité, fiches d'inscription, quiz, registrariat, finance, erreurs |
+| ⚛️ **Web** (`web/`) | **361** | client d'API (CSRF, réessai sur 419, hors réseau), formats, calculs, reprise après échec de chargement |
+| 🌐 **e2e Chrome** | **552** vérifications (551 au dernier passage complet : un préchargement de page coupé par le réseau local de Windows) | parcours réels dans un vrai navigateur, dont le téléchargement d'un vrai PDF, la connexion par la fiche, les Actualités et la résolution réelle du Rubik's Cube. Base **de démonstration** uniquement. |
 
 ```bash
 cd api && php artisan test
@@ -220,6 +220,7 @@ Pour chaque écran repris, la **vraie fonction de l'ancien code** est exécutée
 | 📅 Échéances | **1 683** vérifications, 400 saisies aléatoires | **0** |
 | 🏷️ Barème et frais | **47 088** cases + **12 674** vérifications d'écriture | **0** |
 | 🖨️ Fiche d'inscription (personnel) | **2 295** fiches, toutes années (la vraie fiche ancienne) | **0** (hors ligne costume, assumé) |
+| 📑 Relevé semestriel | **2 724** relevés, **72 976** lignes de cours (la vraie page ancienne) | **0** (hors écarts déclarés) |
 
 Les écarts **voulus** (corrections par rapport à l'ancien comportement) sont listés écran par écran dans [`docs/FONCTIONNALITES.md`](docs/FONCTIONNALITES.md).
 

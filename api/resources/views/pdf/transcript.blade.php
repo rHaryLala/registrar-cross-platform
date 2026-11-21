@@ -35,7 +35,7 @@
     .who td { padding: 1.2pt 4pt; vertical-align: top; }
     .who td.k { color: #5b6170; width: 22%; text-align: right; }
     .box { border: 0.6pt solid #9aa1ae; padding: 4pt 6pt; }
-    .avg { background: #00727e; color: #ffffff; font-weight: bold; }
+    .grid th.avg, .grid td.avg { background: #00727e; color: #ffffff; font-weight: bold; }
     .small { font-size: 7pt; color: #5b6170; }
     .ok { color: #15803d; font-weight: bold; }
     .ko { color: #b91c1c; font-weight: bold; }
@@ -80,7 +80,7 @@
     <div class="session">
     <table class="grid">
         <thead>
-            <tr class="head"><th colspan="7"><b>{{ $s['level_label'] ?? '—' }}</b> | {{ $s['session']['name'] }} — session n° {{ $s['session']['semester'] }} | année {{ $s['session']['year'] }}</th></tr>
+            <tr class="head"><th colspan="7">@if ($s['level_label'])<b>{{ $s['level_label'] }}</b> | @endif{{ $s['session']['name'] }} — session n° {{ $s['session']['semester'] }} | année {{ $s['session']['year'] }}</th></tr>
             <tr>
                 <th style="width: 13%">Sigle</th>
                 <th>Titre du cours</th>
@@ -132,8 +132,9 @@
 @endforeach
 
 @if (count($t['sessions']) > 0)
+    <div class="nobreak">
     <h2>Récapitulatif général</h2>
-    <table class="grid nobreak">
+    <table class="grid">
         <tr><td style="width: 60%">Nombre total de sessions</td><td><b>{{ $summary['sessions'] }}</b></td></tr>
         <tr><td>Nombre total de cours</td><td><b>{{ $summary['courses'] }}</b></td></tr>
         <tr><td class="ok">Cours validés</td><td class="ok">{{ $summary['valid_courses'] }} cours ({{ $summary['valid_credits'] }} crédits)</td></tr>
@@ -144,14 +145,17 @@
         <tr><td>Total des crédits</td><td><b>{{ $summary['credits'] }} crédits</b></td></tr>
         <tr><td>Taux de réussite</td><td><b>{{ $n($summary['success_rate']) }} %</b></td></tr>
     </table>
+    </div>
 
+    <div class="nobreak">
     <h2>Moyenne cumulative</h2>
-    <table class="grid nobreak">
+    <table class="grid">
         <tr><td style="width: 75%" class="r">Note de Work Education cumulative</td><td class="c">{{ $n($cum['work_education']) }}</td></tr>
         <tr><td class="r">Note de participation à l’exercice de chapelle et à la semaine de prière cumulative</td><td class="c">{{ $n($cum['chapel']) }}</td></tr>
         <tr><th class="r">Moyenne majeure cumulative</th><th class="c">{{ $n($cum['major']) }}</th></tr>
         <tr><th class="r">Moyenne générale cumulative</th><th class="c avg">{{ $n($cum['general']) }}</th></tr>
     </table>
+    </div>
 
     <div class="small" style="margin-top: 6pt; border-top: 0.6pt solid #cbd5e1; padding-top: 3pt">
         <b>Légende :</b> <span class="ok">Validé</span> = note ≥ 10, ou validé sans note (V) ·

@@ -67,3 +67,8 @@ Ordre prudent :
 
 - **Aucune migration.** Le PDF est fabriqué par dompdf : le dossier `storage/app/dompdf` doit être **inscriptible** par l'utilisateur de PHP-FPM (polices et fichiers temporaires). La photo est lue dans `STUDENT_PHOTOS_PATH`, comme pour la fiche de l'espace étudiant.
 - Accès niveaux 1 à 4. La réponse n'est jamais mise en cache : ne pas ajouter de cache de réponses devant `/api/v1/staff/students/*/enrollment-sheets/*/pdf`. Limite de 30 PDF par minute et par compte.
+
+### Relevé semestriel et bas des documents officiels
+
+- **Aucune migration.** Trois réglages (fichier `.env`) pour le bas des documents officiels : `REGISTRAR_PLACE` (défaut « Sambaina »), `REGISTRAR_NAME` (le nom et le titre imprimés sous la signature ; l'ancien code écrivait « Madame Daniella MALALANIRINA » en dur) et `REGISTRAR_SIGNATURE_FILE` (chemin absolu de l'image de signature, par exemple `file/signature.png` de l'ancienne application). Sans fichier valide, le document porte une ligne de signature vide, jamais une image par défaut. **À renseigner avant la mise en ligne.**
+- Accès niveaux 1 à 4, jamais mis en cache (30 PDF par minute et par compte).

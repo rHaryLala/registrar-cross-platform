@@ -209,14 +209,13 @@ final class Transcript
 
             $incomplete = ! $numeric || $g <= 0.0;
             $passFail = GradeStatus::isValidationCourse($n->cours_category, $n->Sigle, $n->title_cours);
-            $statusOnly = $g === -2.0 || $g === -3.0;
 
             if ($g === -2.0 || ($passFail && $g >= 10)) {
                 $note = 'V';
             } elseif ($g === -3.0 || ($passFail && $g > 0 && $g < 10)) {
                 $note = 'E';
             } elseif ($incomplete) {
-                $note = (! $numeric || $g < 0) ? '--' : 'NN';
+                $note = (! $numeric || $g < 0) ? 'NN' : '--';
             } else {
                 $note = $raw;
             }
@@ -236,7 +235,8 @@ final class Transcript
                 $recap['incomplete_credits'] += $credit;
             }
 
-            $outOfAverage = $passFail || $statusOnly || $incomplete;
+            // -2 et -3 (validé / échec sans note) sont négatifs : ils sont déjà « incomplets » pour le calcul.
+            $outOfAverage = $passFail || $incomplete;
             $lineTotal = $outOfAverage ? null : $credit * $g;
             $credits += $credit;
             if (! $outOfAverage) {

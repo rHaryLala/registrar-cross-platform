@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Domain\Documents\StaffCertificates;
 use App\Domain\Documents\StaffEnrollmentSheets;
 use App\Domain\Documents\StaffTranscripts;
 use App\Http\Controllers\Controller;
@@ -15,6 +16,7 @@ class StaffDocumentsController extends Controller
     public function __construct(
         private readonly StaffEnrollmentSheets $sheets,
         private readonly StaffTranscripts $transcripts,
+        private readonly StaffCertificates $certificates,
     ) {}
 
     public function enrollmentSheets(Request $request, int $id): JsonResponse
@@ -38,6 +40,12 @@ class StaffDocumentsController extends Controller
     public function transcriptPdf(Request $request, int $id): Response
     {
         return $this->pdf($this->transcripts->pdf($request->user(), $id, $request->query()));
+    }
+
+    /** Le certificat de scolarité : données personnelles (naissance, parents), jamais mis en cache. */
+    public function certificatePdf(Request $request, int $id): Response
+    {
+        return $this->pdf($this->certificates->pdf($request->user(), $id));
     }
 
     /** @param  array{filename: string, content: string}  $file */
