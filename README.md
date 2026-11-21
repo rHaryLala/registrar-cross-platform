@@ -14,7 +14,7 @@ Web · Android · iOS · Windows · macOS — une seule application (PWA), sur l
 ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?style=flat-square&logo=mysql&logoColor=white)
 ![PWA](https://img.shields.io/badge/PWA-hors%20ligne-5A0FC8?style=flat-square&logo=pwa&logoColor=white)
 
-![Tests PHP](https://img.shields.io/badge/tests%20PHP-1024-1a2b6a?style=flat-square)
+![Tests PHP](https://img.shields.io/badge/tests%20PHP-1035-1a2b6a?style=flat-square)
 ![Tests web](https://img.shields.io/badge/tests%20web-361-1a2b6a?style=flat-square)
 ![e2e Chrome](https://img.shields.io/badge/e2e%20Chrome-551%2F552-00c4d4?style=flat-square)
 ![Lots](https://img.shields.io/badge/lots-5%20sur%208-00c4d4?style=flat-square)
@@ -172,7 +172,7 @@ Dossier `api/`, PHP 8.3 explicite : `php artisan serve --host=127.0.0.1 --port=8
 
 | Suite | Nombre | Ce qu'elle couvre |
 |---|---|---|
-| 🐘 **PHP** (`api/`) | **1 024** | connexion, Google (vraie cryptographie), notes, assiduité, fiches d'inscription, quiz, registrariat, finance, erreurs |
+| 🐘 **PHP** (`api/`) | **1 035** | connexion, Google (vraie cryptographie), notes, assiduité, certificats et autres PDF, quiz, registrariat, finance, erreurs |
 | ⚛️ **Web** (`web/`) | **361** | client d'API (CSRF, réessai sur 419, hors réseau), formats, calculs, reprise après échec de chargement |
 | 🌐 **e2e Chrome** | **552** vérifications (551 au dernier passage complet : un préchargement de page coupé par le réseau local de Windows) | parcours réels dans un vrai navigateur, dont le téléchargement d'un vrai PDF, la connexion par la fiche, les Actualités et la résolution réelle du Rubik's Cube. Base **de démonstration** uniquement. |
 
